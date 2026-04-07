@@ -1,0 +1,27 @@
+# Dépendances Node.js
+node_modules/
+npm-debug.log*
+
+# Variables d'environnement — NE JAMAIS commiter
+.env
+.env.*
+!.env.example
+
+# Bibliothèque — fichiers STL/3MF/photos (trop volumineux)
+library/
+backups/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+dist/
