@@ -1,0 +1,29 @@
+# Dépendances Node.js
+node_modules/
+npm-debug.log*
+
+# Variables d'environnement
+.env
+.env.*
+!.env.example
+
+# Bibliothèque — fichiers STL/3MF/photos
+library/
+backups/
+
+# Certificats SSL générés localement
+*.crt
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
