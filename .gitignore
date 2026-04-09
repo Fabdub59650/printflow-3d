@@ -1,0 +1,16 @@
+node_modules/
+npm-debug.log*
+.env
+.env.*
+!.env.example
+library/
+backups/
+*.crt
+*.pem
+*.key
+*.log
+logs/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
