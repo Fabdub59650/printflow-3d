@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const { logAction } = require('../history');
 const db     = require('../db');
 const path   = require('path');
 const fs     = require('fs');
@@ -129,6 +130,7 @@ router.post('/objects', async (req, res) => {
       [name, theme_id||null, description||null, tags||null, source_url||null]
     );
     const [[obj]] = await db.query('SELECT * FROM library_objects WHERE id=?', [r.insertId]);
+    await logAction('library_object', r.insertId, 'create', 'Objet créé : ' + obj.name);
     res.status(201).json(obj);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -141,6 +143,7 @@ router.put('/objects/:id', async (req, res) => {
       [name, theme_id||null, description||null, tags||null, source_url||null, req.params.id]
     );
     const [[obj]] = await db.query('SELECT * FROM library_objects WHERE id=?', [req.params.id]);
+    await logAction('library_object', req.params.id, 'update', 'Objet modifié : ' + obj.name);
     res.json(obj);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -148,14 +151,14 @@ router.put('/objects/:id', async (req, res) => {
 router.delete('/objects/:id', async (req, res) => {
   try {
     const libPath = await getLibraryPath();
-    // Supprimer la photo si elle existe
-    const [[obj]] = await db.query('SELECT photo_path FROM library_objects WHERE id=?', [req.params.id]);
+    const [[obj]] = await db.query('SELECT name, photo_path FROM library_objects WHERE id=?', [req.params.id]);
     if (obj && obj.photo_path) {
       const fp = path.join(libPath, obj.photo_path);
       if (fs.existsSync(fp)) fs.unlinkSync(fp);
     }
     await db.query('UPDATE library_files SET object_id=NULL,part_name=NULL WHERE object_id=?', [req.params.id]);
     await db.query('DELETE FROM library_objects WHERE id=?', [req.params.id]);
+    await logAction('library_object', req.params.id, 'delete', 'Objet supprimé : ' + (obj?.name||'?'));
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -163,13 +166,11 @@ router.delete('/objects/:id', async (req, res) => {
 router.delete('/objects/:id/full', async (req, res) => {
   try {
     const libPath = await getLibraryPath();
-    // Supprimer la photo
-    const [[obj]] = await db.query('SELECT photo_path FROM library_objects WHERE id=?', [req.params.id]);
+    const [[obj]] = await db.query('SELECT name, photo_path FROM library_objects WHERE id=?', [req.params.id]);
     if (obj && obj.photo_path) {
       const fp = path.join(libPath, obj.photo_path);
       if (fs.existsSync(fp)) fs.unlinkSync(fp);
     }
-    // Supprimer les fichiers liés
     const [files] = await db.query('SELECT * FROM library_files WHERE object_id=?', [req.params.id]);
     for (const f of files) {
       const fp = path.join(libPath, f.file_path);
@@ -177,6 +178,7 @@ router.delete('/objects/:id/full', async (req, res) => {
     }
     await db.query('DELETE FROM library_files WHERE object_id=?', [req.params.id]);
     await db.query('DELETE FROM library_objects WHERE id=?', [req.params.id]);
+    await logAction('library_object', req.params.id, 'delete', 'Objet supprimé (complet) : ' + (obj?.name||'?'));
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

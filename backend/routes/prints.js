@@ -61,6 +61,7 @@ router.post('/', async (req, res) => {
       SELECT p.*, pr.name as printer_name, f.name as filament_name, f.color_hex
       FROM prints p LEFT JOIN printers pr ON p.printer_id=pr.id LEFT JOIN filaments f ON p.filament_id=f.id
       WHERE p.id=?`, [result.insertId]);
+    await logAction('print', result.insertId, 'create', 'Impression créée : ' + rows[0].name);
     res.status(201).json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -129,13 +130,19 @@ router.put('/:id', async (req, res) => {
       SELECT p.*, pr.name as printer_name, f.name as filament_name, f.color_hex
       FROM prints p LEFT JOIN printers pr ON p.printer_id=pr.id LEFT JOIN filaments f ON p.filament_id=f.id
       WHERE p.id=?`, [req.params.id]);
+    const detail = status !== prev.status
+      ? `Impression "${rows[0].name}" — statut : ${prev.status} → ${status}`
+      : `Impression modifiée : ${rows[0].name}`;
+    await logAction('print', req.params.id, 'update', detail);
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
   try {
+    const [[p]] = await db.query('SELECT name FROM prints WHERE id=?', [req.params.id]);
     await db.query('DELETE FROM prints WHERE id=?', [req.params.id]);
+    await logAction('print', req.params.id, 'delete', 'Impression supprimée : ' + (p?.name||'?'));
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

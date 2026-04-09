@@ -38,6 +38,7 @@ router.post('/', async (req, res) => {
        req.body.spool_number||null, req.body.elegoo_subtype||null]
     );
     const [rows] = await db.query('SELECT * FROM filaments WHERE id=?', [result.insertId]);
+    await logAction('filament', result.insertId, 'create', 'Filament créé : ' + rows[0].name);
     res.status(201).json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -60,6 +61,7 @@ router.put('/:id', async (req, res) => {
        finish_option||null,special_option||null,spool_weight||null,req.body.nfc_uid||null,req.body.spool_number||null,req.body.elegoo_subtype||null,req.params.id]
     );
     const [rows] = await db.query('SELECT * FROM filaments WHERE id=?', [req.params.id]);
+    await logAction('filament', req.params.id, 'update', 'Filament modifié : ' + rows[0].name);
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

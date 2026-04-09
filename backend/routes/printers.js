@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const { logAction } = require('../history');
 const db = require('../db');
 
 // GET all printers
@@ -54,6 +55,7 @@ router.post('/', async (req, res) => {
        volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,location,notes]
     );
     const [rows] = await db.query('SELECT * FROM printers WHERE id = ?', [result.insertId]);
+    await logAction('printer', result.insertId, 'create', 'Imprimante créée : ' + rows[0].name);
     res.status(201).json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -73,6 +75,7 @@ router.put('/:id', async (req, res) => {
        location,notes,status,req.params.id]
     );
     const [rows] = await db.query('SELECT * FROM printers WHERE id = ?', [req.params.id]);
+    await logAction('printer', req.params.id, 'update', 'Imprimante modifiée : ' + rows[0].name);
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -88,7 +91,9 @@ router.patch('/:id/status', async (req, res) => {
 // DELETE printer
 router.delete('/:id', async (req, res) => {
   try {
+    const [[pdel]] = await db.query('SELECT name FROM printers WHERE id=?', [req.params.id]);
     await db.query('DELETE FROM printers WHERE id = ?', [req.params.id]);
+    await logAction('printer', req.params.id, 'delete', 'Imprimante supprimée : ' + (pdel?.name||'?'));
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
