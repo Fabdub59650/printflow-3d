@@ -322,6 +322,21 @@ async function renderSettings() {
       </div>
     </div>
 
+    <!-- ── TigerTag Scale ───────────────────────── -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">TigerTag Scale</span></div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        Balance connectée ESP32 avec lecteur RFID. Quand une bobine est posée et stabilisée,
+        la pesée est créée automatiquement dans PrintFlow.
+      </p>
+      <div style="background:var(--bg3);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px">
+        <div style="font-weight:500;margin-bottom:6px">URL du webhook à configurer sur l'ESP32 :</div>
+        <code id="tigertag-webhook-url" style="color:var(--accent);font-size:12px"></code>
+        <div style="margin-top:6px;color:var(--text3)">Dans le firmware ESP32 — remplacer l'URL du cloud TigerTag par cette adresse.</div>
+      </div>
+      <div id="tigertag-recent" style="margin-top:8px"></div>
+    </div>
+
     <!-- ── Restauration ──────────────────────────── -->
     <div class="card">
       <div class="card-header"><span class="card-title">Restauration</span></div>
@@ -428,6 +443,11 @@ async function renderSettings() {
   // Backup status
   loadBackupStatus();
 
+  // TigerTag webhook URL — remplir immédiatement après rendu HTML
+  const ttUrlEl = document.getElementById('tigertag-webhook-url');
+  if (ttUrlEl) ttUrlEl.textContent = window.location.origin + '/api/tigertag/webhook';
+  loadTigerTagRecent();
+
   // Table imprimantes
   API.get('/printers').then(printers => {
     document.getElementById('printer-access-table').innerHTML = printers.map(p => `
@@ -491,6 +511,11 @@ function toggleSpoolman() {
   API.put('/settings', body).then(() => {
     // Rafraîchir le badge Spoolman dans la sidebar
     if (typeof checkSpoolmanStatus === 'function') checkSpoolmanStatus();
+    // TigerTag webhook URL
+    const ttUrlEl = document.getElementById('tigertag-webhook-url');
+    if (ttUrlEl) ttUrlEl.textContent = window.location.origin + '/api/tigertag/webhook';
+    // Dernières pesées TigerTag
+    loadTigerTagRecent();
     // Remplir l'URL de base de l'API
     const apiBase = window.location.origin;
     const apiBaseEl = document.getElementById('api-base-url');
@@ -822,5 +847,36 @@ async function restoreBackup(filename) {
     status.style.color = 'var(--danger)';
     status.textContent = '❌ ' + e.message;
     setTimeout(function() { document.body.removeChild(status); }, 4000);
+  }
+}
+
+// ── TigerTag Scale ───────────────────────────────────────
+async function loadTigerTagRecent() {
+  const el = document.getElementById('tigertag-recent');
+  if (!el) return;
+  try {
+    const data = await API.get('/tigertag/status');
+    if (!data.recent || !data.recent.length) {
+      el.innerHTML = '<p style="font-size:12px;color:var(--text3)">Aucune pesée TigerTag Scale enregistrée.</p>';
+      return;
+    }
+    el.innerHTML =
+      '<div style="font-size:12px;font-weight:500;margin-bottom:8px;color:var(--text2)">Dernières pesées reçues</div>' +
+      '<table><thead><tr><th>Date</th><th>Filament</th><th>Brut</th><th>Net</th></tr></thead><tbody>' +
+      data.recent.map(function(w) {
+        return '<tr>' +
+          '<td style="font-size:11px;color:var(--text3);white-space:nowrap">' + fmtDateTime(w.created_at) + '</td>' +
+          '<td style="font-size:12px">' +
+            '<span style="display:inline-flex;align-items:center;gap:5px">' +
+            '<span style="width:8px;height:8px;border-radius:50%;background:' + (w.color_hex||'#888') + ';display:inline-block"></span>' +
+            w.filament_name + '</span>' +
+          '</td>' +
+          '<td style="font-size:12px">' + parseFloat(w.gross_weight).toFixed(0) + 'g</td>' +
+          '<td style="font-size:12px;font-weight:500;color:var(--accent)">' + parseFloat(w.net_weight).toFixed(0) + 'g</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table>';
+  } catch(_) {
+    el.innerHTML = '<p style="font-size:12px;color:var(--text3)">TigerTag Scale non connecté.</p>';
   }
 }

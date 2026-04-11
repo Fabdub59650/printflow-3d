@@ -50,6 +50,11 @@ app.use('/api/projects',    require('./routes/projects'));
 app.use('/api/weighings',   require('./routes/weighings'));
 app.use('/api/library',     require('./routes/library'));
 
+// TigerTag Scale webhook
+const tigertagRouter = require('express').Router();
+tigertagRouter.use(require('./routes/tigertag'));
+app.use('/api/tigertag', tigertagRouter);
+
 // Historique
 const historyRouter = require('express').Router();
 historyService.setupRoutes(historyRouter);

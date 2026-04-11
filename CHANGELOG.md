@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.8.0] — 2026-04-11
+
+### Ajouté
+- **Intégration TigerTag Scale** — balance connectée ESP32 avec lecteur RFID. Quand une bobine est posée et stabilisée, la pesée est créée automatiquement dans PrintFlow via webhook local (sans cloud TigerTag). L'OLED de la balance affiche le poids net retourné par PrintFlow.
+- Route `POST /api/tigertag/webhook` — reçoit `uid_hex` + `weight_gross`, trouve le filament, calcule le net, enregistre la pesée, retourne `weight_available` au format compatible TigerTag Scale
+- Route `GET /api/tigertag/status` — dernières pesées reçues via TigerTag Scale
+- Section Paramètres "TigerTag Scale" — URL du webhook à configurer sur l'ESP32, tableau des dernières pesées reçues
+- **Firmware ESP32 patché** (`tigertag-scale-patch.cpp`) — `pushWeightToCloud()` réécrite pour appeler PrintFlow, route `/api/printflow-config` pour configurer l'URL depuis l'interface web de la balance
+
+### Corrigé
+- Édition d'un filament efface le lien NFC — `nfc_uid`, `spool_number` et `elegoo_subtype` préservés si absents du body du PUT
+- URL webhook TigerTag Scale non affichée dans les Paramètres au chargement de la page
+- Onglet "Impressions" ajouté dans Statistiques (durée estimée vs réelle, taux réussite)
+
+---
+
 ## [1.7.1] — 2026-04-09
 
 ### Ajouté
@@ -25,20 +41,15 @@
 - **Export PDF fiche objet** — photo + fichiers + matières recommandées + tags en PDF A4
 - **Édition maintenance** — bouton ✏, formulaire pré-rempli, routes GET/:id et PUT/:id
 - **Alertes maintenance dashboard** — widget code couleur, délai configurable, bouton ✓ Fait
-- **Paramètres alertes maintenance** — toggle on/off + nombre de jours
 - **HTTPS** — script setup-https.sh (certificat auto-signé 10 ans, Nginx, export client)
 - **API REST documentée** — Swagger UI sur /api-docs, fichier openapi.yaml, section Paramètres avec exemple Home Assistant
-- **Bouton installation PWA** en sidebar et dans Paramètres
 
 ### Corrigé
 - Filtre statut impressions — variable printers hors scope
 - Toggle vue galerie/liste bibliothèque — état actif non mis à jour
 - Fichier lié à un objet devenant standalone après édition
-- Matières recommandées déplacées de l'objet vers les fichiers
-- Compteurs thèmes non actualisés sans refresh
 - Upload bibliothèque — parser multipart remplacé par multer
 - Couleurs CSS inline incompatibles Safari
-- logProjectEvent → logAction dans routes/projects.js
 
 ---
 
@@ -48,15 +59,10 @@
 - Statistiques de consommation par matière (7/30/90 jours)
 - Tri des colonnes filaments par clic sur l'en-tête
 - Recherche/filtre rapide dans l'onglet Filaments
-- Filtre matière cliquable sur les en-têtes de groupe
-- Colonne Couleur séparée dans le tableau filaments
 - Import CSV de filaments avec mapping automatique
 - Filtre par statut dans les impressions (boutons visuels)
-- Widget consommation 30j et dernières impressions sur le dashboard
-- Modale NFC enrichie : stock, progression, températures, notes
 - Vue galerie ⊞ / liste ☰ dans la bibliothèque
 - Matières recommandées par fichier de bibliothèque
-- Mise à jour nom de l'application en temps réel
 
 ---
 
@@ -69,7 +75,6 @@
 - Authentification par mot de passe (optionnelle)
 - Script de mise à jour scripts/patch.sh
 - Export complet BDD + bibliothèque + config en .tar.gz
-- Badge NFC en sidebar
 
 ---
 
@@ -79,7 +84,6 @@
 - Encodage format ELEGOO Centauri Carbon 2 sur NTAG215
 - Codes matière et sous-types vérifiés sur puces originales
 - Bouton "◈ Écrire ELEGOO" + bouton "🔍 Dump" dans modale NFC
-- Champ elegoo_subtype dans fiche filament
 
 ---
 

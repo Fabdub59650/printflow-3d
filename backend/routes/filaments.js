@@ -49,6 +49,17 @@ router.put('/:id', async (req, res) => {
             temp_nozzle_min, temp_nozzle_max, temp_bed_min, temp_bed_max,
             weight_total, weight_remaining, price, spoolman_id, location, notes, archived,
             finish_option, special_option, spool_weight } = req.body;
+
+    // Préserver nfc_uid, spool_number et elegoo_subtype si absents du body
+    // (évite d'effacer le lien NFC lors d'une édition depuis le formulaire)
+    const [[current]] = await db.query(
+      'SELECT nfc_uid, spool_number, elegoo_subtype FROM filaments WHERE id=?',
+      [req.params.id]
+    );
+    const nfc_uid       = 'nfc_uid'       in req.body ? (req.body.nfc_uid       || null) : (current?.nfc_uid       || null);
+    const spool_number  = 'spool_number'  in req.body ? (req.body.spool_number  || null) : (current?.spool_number  || null);
+    const elegoo_subtype= 'elegoo_subtype'in req.body ? (req.body.elegoo_subtype|| null) : (current?.elegoo_subtype|| null);
+
     await db.query(
       `UPDATE filaments SET name=?,brand=?,material=?,color_name=?,color_hex=?,diameter=?,
         temp_nozzle_min=?,temp_nozzle_max=?,temp_bed_min=?,temp_bed_max=?,
@@ -58,7 +69,8 @@ router.put('/:id', async (req, res) => {
       [name,brand,material,color_name,color_hex,diameter,
        temp_nozzle_min,temp_nozzle_max,temp_bed_min,temp_bed_max,
        weight_total,weight_remaining,price,spoolman_id,location,notes,archived||0,
-       finish_option||null,special_option||null,spool_weight||null,req.body.nfc_uid||null,req.body.spool_number||null,req.body.elegoo_subtype||null,req.params.id]
+       finish_option||null,special_option||null,spool_weight||null,
+       nfc_uid, spool_number, elegoo_subtype, req.params.id]
     );
     const [rows] = await db.query('SELECT * FROM filaments WHERE id=?', [req.params.id]);
     await logAction('filament', req.params.id, 'update', 'Filament modifié : ' + rows[0].name);

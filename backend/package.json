@@ -1,6 +1,6 @@
 {
   "name": "printflow",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "PrintFlow — Gestion impressions 3D",
   "main": "server.js",
   "scripts": {
@@ -20,5 +20,5 @@
   "devDependencies": {
     "nodemon": "^3.0.2"
   },
-  "build_date": "09/04/2026"
+  "build_date": "11/04/2026"
 }
