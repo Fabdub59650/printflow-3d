@@ -351,7 +351,7 @@ function setupRoutes(router) {
         if (r.key_name !== 'auth_password') configObj[r.key_name] = r.value;
       });
       configObj._export_date    = now.toISOString();
-      configObj._export_version = '1.7.1';
+      configObj._export_version = '1.9.0';
       fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify(configObj, null, 2));
 
       // 3. Copier la bibliothèque si elle existe

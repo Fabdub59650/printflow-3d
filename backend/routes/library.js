@@ -114,9 +114,31 @@ router.get('/objects/:id', async (req, res) => {
        LEFT JOIN library_themes t ON o.theme_id=t.id WHERE o.id=?`, [req.params.id]
     );
     if (!obj) return res.status(404).json({ error: 'Non trouvé' });
+    const showAll = req.query.all_versions === '1';
     const [files] = await db.query(
-      'SELECT * FROM library_files WHERE object_id=? ORDER BY part_name, created_at', [req.params.id]
+      'SELECT * FROM library_files WHERE object_id=? ' + (showAll ? '' : 'AND is_latest=1 ') +
+      'ORDER BY part_name, created_at DESC', [req.params.id]
     );
+    // Enrichir chaque fichier avec son historique de versions
+    for (const f of files) {
+      // Remonter jusqu'à la racine
+      let rootId = f.id;
+      let cur = f;
+      while (cur && cur.parent_file_id) {
+        rootId = cur.parent_file_id;
+        const [[parent]] = await db.query('SELECT id, parent_file_id FROM library_files WHERE id=?', [rootId]);
+        cur = parent;
+      }
+      // Récupérer toute la chaîne depuis la racine
+      const [versions] = await db.query(
+        `SELECT id, version, changelog, created_at, file_size, is_latest
+         FROM library_files
+         WHERE id=? OR parent_file_id=?
+         ORDER BY created_at DESC`,
+        [rootId, rootId]
+      );
+      f.version_history = versions;
+    }
     res.json({ ...obj, files });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -202,7 +224,7 @@ router.delete('/objects/:id/files/:fileId', async (req, res) => {
 // ── FICHIERS ───────────────────────────────────────────────
 router.get('/files', async (req, res) => {
   try {
-    const { theme_id, search, standalone } = req.query;
+    const { theme_id, search, standalone, object_id } = req.query;
     let sql = `SELECT f.*,t.name AS theme_name,o.name AS object_name
                FROM library_files f
                LEFT JOIN library_themes  t ON f.theme_id  = t.id
@@ -210,6 +232,7 @@ router.get('/files', async (req, res) => {
                WHERE 1=1`;
     const params = [];
     if (standalone==='1') sql += ' AND f.object_id IS NULL';
+    if (object_id) { sql += ' AND f.object_id=?'; params.push(object_id); }
     if (theme_id) { sql += ' AND (f.theme_id=? OR t.parent_id=?)'; params.push(theme_id,theme_id); }
     if (search)   { sql += ' AND (f.name LIKE ? OR f.tags LIKE ? OR f.description LIKE ?)';
                     const s='%'+search+'%'; params.push(s,s,s); }
@@ -234,19 +257,60 @@ router.post('/files', upload.single('file'), async (req, res) => {
     const fileType = ALLOWED.includes(fileExt) ? fileExt : 'other';
     const [result] = await db.query(
       `INSERT INTO library_files (name,original_name,file_path,file_size,file_type,
-         theme_id,object_id,part_name,description,tags,source_url,recommended_materials)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+         theme_id,object_id,part_name,description,tags,source_url,recommended_materials,
+         version,changelog,parent_file_id,is_latest)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`,
       [
         fields.name || path.basename(fileName, '.' + fileExt),
         fileName, diskName, fileBuffer.length, fileType,
         fields.theme_id || null, fields.object_id || null, fields.part_name || null,
         fields.description || null, fields.tags || null, fields.source_url || null,
         fields.recommended_materials || null,
+        fields.version || null, fields.changelog || null,
+        fields.parent_file_id || null,
       ]
     );
+    // Si c'est une nouvelle version, marquer l'ancien comme non-latest
+    if (fields.parent_file_id) {
+      await db.query('UPDATE library_files SET is_latest=0 WHERE id=?', [fields.parent_file_id]);
+    }
     const [[file]] = await db.query('SELECT * FROM library_files WHERE id=?', [result.insertId]);
     res.status(201).json(file);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/library/files/:id/versions — historique complet des versions
+router.get('/files/:id/versions', async (req, res) => {
+  try {
+    const fileId = parseInt(req.params.id);
+    // Remonter jusqu'à la racine de la chaîne
+    let rootId = fileId;
+    let [[cur]] = await db.query('SELECT id, parent_file_id FROM library_files WHERE id=?', [rootId]);
+    while (cur && cur.parent_file_id) {
+      rootId = cur.parent_file_id;
+      [[cur]] = await db.query('SELECT id, parent_file_id FROM library_files WHERE id=?', [rootId]);
+    }
+    // Récupérer toute la chaîne depuis la racine
+    const [versions] = await db.query(
+      `SELECT id, name, version, changelog, file_size, created_at, is_latest, parent_file_id
+       FROM library_files
+       WHERE id=? OR parent_file_id=?
+       ORDER BY created_at DESC`,
+      [rootId, rootId]
+    );
+    res.json(versions);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/library/files/:id — modifier version/changelog
+router.patch('/files/:id', async (req, res) => {
+  try {
+    const { version, changelog } = req.body;
+    await db.query('UPDATE library_files SET version=?, changelog=? WHERE id=?',
+      [version||null, changelog||null, req.params.id]);
+    const [[f]] = await db.query('SELECT * FROM library_files WHERE id=?', [req.params.id]);
+    res.json(f);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/library/files/:id — détail d'un fichier

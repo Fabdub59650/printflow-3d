@@ -1,6 +1,6 @@
 {
   "name": "printflow",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "PrintFlow — Gestion impressions 3D",
   "main": "server.js",
   "scripts": {
@@ -15,10 +15,12 @@
     "node-fetch": "^2.7.0",
     "express-http-proxy": "^2.0.0",
     "multer": "^2.1.1",
-    "nfc-pcsc": "^0.8.1"
+    "nfc-pcsc": "^0.8.1",
+    "nodemailer": "^6.9.8",
+    "node-cron": "^3.0.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
   },
-  "build_date": "11/04/2026"
+  "build_date": "13/04/2026"
 }

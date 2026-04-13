@@ -4,14 +4,14 @@ const db     = require('../db');
 // GET /api/weighings?filament_id=X
 router.get('/', async (req, res) => {
   try {
-    const { filament_id } = req.query;
+    const { filament_id, limit } = req.query;
     let sql = `SELECT w.*, f.name AS filament_name, f.color_hex
                FROM filament_weighings w
                JOIN filaments f ON w.filament_id = f.id
                WHERE 1=1`;
     const params = [];
     if (filament_id) { sql += ' AND w.filament_id=?'; params.push(filament_id); }
-    sql += ' ORDER BY w.created_at DESC LIMIT 100';
+    sql += ' ORDER BY w.created_at DESC LIMIT ' + (parseInt(limit) || 100);
     const [rows] = await db.query(sql, params);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }

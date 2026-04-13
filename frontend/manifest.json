@@ -1,6 +1,6 @@
 {
-  "name": "PrintFlow 3D",
-  "short_name": "PrintFlow",
+  "name": "PrintFlow-3D",
+  "short_name": "PrintFlow-3D",
   "description": "Gestion d'impressions 3D et filaments",
   "start_url": "/",
   "display": "standalone",
@@ -37,5 +37,5 @@
       "description": "Ajouter une impression"
     }
   ],
-  "version": "1.7.1"
+  "version": "1.9.0"
 }

@@ -1,15 +1,36 @@
-function openModal(html, title) {
-  document.getElementById('modal').innerHTML = `
-    <div class="modal-header">
-      <span class="modal-title">${title}</span>
-      <button class="btn btn-sm" onclick="closeModal()">✕</button>
-    </div>
-    ${html}`;
-  document.getElementById('modal').classList.remove('hidden');
+function openModal(html, title, options) {
+  const modal = document.getElementById('modal');
+  const tabbed = options && options.tabbed;
+  modal.className = 'modal' + (tabbed ? ' modal-tabbed' : '');
+
+  if (tabbed) {
+    // Séparer le footer du reste pour le garder fixe en bas
+    const footerMatch = html.match(/(<div class="modal-footer">[\s\S]*<\/div>)\s*$/);
+    const footer = footerMatch ? footerMatch[1] : '';
+    const body   = footerMatch ? html.slice(0, html.lastIndexOf(footerMatch[1])) : html;
+    modal.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">${title}</span>
+        <button class="btn btn-sm" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-tab-body">${body}</div>
+      ${footer}`;
+  } else {
+    modal.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">${title}</span>
+        <button class="btn btn-sm" onclick="closeModal()">✕</button>
+      </div>
+      ${html}`;
+  }
+
+  modal.classList.remove('hidden');
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
 function closeModal() {
-  document.getElementById('modal').classList.add('hidden');
+  const modal = document.getElementById('modal');
+  modal.classList.add('hidden');
+  modal.className = 'modal hidden';
   document.getElementById('modal-overlay').classList.add('hidden');
 }
 

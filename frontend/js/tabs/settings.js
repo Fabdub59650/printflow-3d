@@ -11,8 +11,39 @@ async function renderSettings() {
   const spoolmanEnabled = settings.spoolman_enabled === 'true';
   const currentTheme    = settings.theme || 'blue';
 
-  document.getElementById('content').innerHTML = `
+  if (!window._settingsTab) window._settingsTab = 'interface';
+  const tab = window._settingsTab;
 
+  const tabDefs = [
+    { id:'interface',    label:'🎨️ Interface'    },
+    { id:'donnees',      label:'💾 Données'      },
+    { id:'integrations', label:'🔌 Intégrations'  },
+    { id:'imprimantes',  label:'🖨️ Imprimantes'  },
+    { id:'systeme',      label:'⚙️ Système'    },
+  ];
+
+  const tabBar = '<div style="display:flex;gap:0;border-bottom:2px solid var(--border2);margin-bottom:20px;flex-wrap:wrap">' +
+    tabDefs.map(function(t) {
+      const active = tab === t.id;
+      return '<button onclick="switchSettingsTab(\'' + t.id + '\',this)" ' +
+        'style="padding:8px 16px;font-size:13px;font-weight:' + (active?'600':'400') + ';' +
+        'border:none;cursor:pointer;background:transparent;' +
+        'color:' + (active?'var(--accent)':'var(--text2)') + ';' +
+        'border-bottom:' + (active?'2px solid var(--accent)':'2px solid transparent') + ';' +
+        'margin-bottom:-2px;transition:all 0.15s;white-space:nowrap">' + t.label + '</button>';
+    }).join('') +
+  '</div>' +
+  '<div id="settings-tab-content"></div>';
+
+  document.getElementById('content').innerHTML = tabBar;
+
+  // Générer le contenu de l'onglet actif
+  const el = document.getElementById('settings-tab-content');
+  if (!el) return;
+
+  switch(tab) {
+    case 'interface':
+      el.innerHTML = `
     <!-- ── Apparence ──────────────────────────────── -->
     <div class="card">
       <div class="card-header"><span class="card-title">Apparence</span></div>
@@ -38,6 +69,26 @@ async function renderSettings() {
             </div>`).join('')}
           </div>
           <input type="hidden" id="set-theme" value="${currentTheme}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mode sombre</label>
+          <select id="set-color-mode" onchange="previewColorMode(this.value)">
+            <option value=""      ${!settings.color_mode||settings.color_mode===''?'selected':''}>Automatique (selon l'OS)</option>
+            <option value="light" ${settings.color_mode==='light'?'selected':''}>Toujours clair</option>
+            <option value="dark"  ${settings.color_mode==='dark'?'selected':''}>Toujours sombre</option>
+            <option value="auto-system" ${settings.color_mode==='auto-system'?'selected':''}>Suivre le thème système</option>
+            <option value="auto-time"   ${settings.color_mode==='auto-time'?'selected':''}>Selon l'heure</option>
+          </select>
+          <div id="color-mode-time-wrap" style="display:${settings.color_mode==='auto-time'?'flex':'none'};gap:12px;margin-top:8px;align-items:center;flex-wrap:wrap">
+            <span style="font-size:13px;color:var(--text2)">Sombre de</span>
+            <select id="set-dark-from" style="width:80px">
+              ${Array.from({length:24},(_,i)=>'<option value="'+i+'"'+(String(settings.dark_from||'20')==String(i)?' selected':'')+'>'+String(i).padStart(2,'0')+'h</option>').join('')}
+            </select>
+            <span style="font-size:13px;color:var(--text2)">à</span>
+            <select id="set-dark-to" style="width:80px">
+              ${Array.from({length:24},(_,i)=>'<option value="'+i+'"'+(String(settings.dark_to||'7')==String(i)?' selected':'')+'>'+String(i).padStart(2,'0')+'h</option>').join('')}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -70,6 +121,19 @@ async function renderSettings() {
                       background:${settings.show_locations!=='false'?'var(--accent)':'var(--border2)'};position:relative;flex-shrink:0">
             <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;
                         top:2px;transition:left 0.2s;left:${settings.show_locations!=='false'?'19px':'2px'}"></div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <div>
+            <div style="font-size:13px">Gestion des projets</div>
+            <div style="font-size:11px;color:var(--text3)">Affiche l'onglet Projets, les champs Projet/Pièce dans les impressions et les widgets du dashboard</div>
+          </div>
+          <div onclick="toggleSetting('projects_enabled', this)" id="toggle-projects-enabled"
+               data-enabled="${settings.projects_enabled!=='false'?'1':'0'}"
+               style="width:40px;height:22px;border-radius:11px;cursor:pointer;transition:background 0.2s;
+                      background:${settings.projects_enabled!=='false'?'var(--accent)':'var(--border2)'};position:relative;flex-shrink:0">
+            <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;
+                        top:2px;transition:left 0.2s;left:${settings.projects_enabled!=='false'?'19px':'2px'}"></div>
           </div>
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
@@ -176,47 +240,30 @@ async function renderSettings() {
       </div>
     </div>
 
-    <!-- ── Spoolman ───────────────────────────────── -->
+    <!-- ── PWA et Notifications ─────────────────── -->
     <div class="card">
-      <div class="card-header">
-        <span class="card-title">Intégration Spoolman</span>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
-          <span style="color:var(--text2)">Activer</span>
-          <div onclick="toggleSpoolman()" id="spoolman-toggle"
-               style="width:40px;height:22px;border-radius:11px;cursor:pointer;transition:background 0.2s;
-                      background:${spoolmanEnabled?'var(--accent)':'var(--border2)'};position:relative">
-            <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;
-                        top:2px;transition:left 0.2s;left:${spoolmanEnabled?'19px':'2px'}"></div>
-          </div>
-        </label>
+      <div class="card-header"><span class="card-title">Application mobile (PWA)</span></div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        PrintFlow peut être installé comme application sur votre mobile ou tablette pour un accès rapide sans navigateur.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-primary" onclick="installPWA()" id="pwa-install-btn-settings">
+          ↓ Installer l'application
+        </button>
+        <span style="font-size:12px;color:var(--text3)">
+          Sur iOS : Safari → Partager → Sur l'écran d'accueil
+        </span>
       </div>
 
-      <div id="spoolman-config" style="display:${spoolmanEnabled?'block':'none'}">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-          <span class="badge ${spoolmanStatus.connected?'badge-success':'badge-danger'}">
-            ${spoolmanStatus.connected?'● Connecté':'● Déconnecté'}
-          </span>
-          ${spoolmanStatus.connected?`<span style="font-size:12px;color:var(--text3)">v${spoolmanStatus.version||'?'} · ${spoolmanStatus.url}</span>`:''}
-        </div>
-        <div class="form-grid">
-          <div class="form-group full">
-            <label class="form-label">URL Spoolman</label>
-            <input id="set-spoolman-url" value="${settings.spoolman_url||'http://localhost:7912'}" placeholder="http://localhost:7912">
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:12px">
-          <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
-          <button class="btn" onclick="testSpoolman()">Tester la connexion</button>
-          <button class="btn btn-success" onclick="syncSpoolmanSettings()">↻ Synchroniser les bobines</button>
-        </div>
-      </div>
+    </div>`;
+      // Synchroniser le thème actif
+      document.querySelectorAll('.theme-btn').forEach(function(b) {
+        b.style.outline = b.dataset.theme === currentTheme ? '3px solid var(--accent)' : 'none';
+      });
+      break;
 
-      <div id="spoolman-disabled-msg" style="display:${spoolmanEnabled?'none':'block'};
-           font-size:13px;color:var(--text3);padding:8px 0">
-        Activez l'intégration Spoolman pour synchroniser vos bobines automatiquement.
-      </div>
-    </div>
-
+    case 'donnees':
+      el.innerHTML = `
     <!-- ── Bibliothèque ───────────────────────────── -->
     <div class="card">
       <div class="card-header"><span class="card-title">Bibliothèque de fichiers</span></div>
@@ -232,6 +279,24 @@ async function renderSettings() {
       </div>
       <div id="lib-stats-display" style="margin-top:10px;font-size:13px;color:var(--text2)">
         Chargement des statistiques…
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
+      </div>
+    </div>
+
+    <!-- ── Photos impressions ─────────────────────── -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Photos des impressions</span></div>
+      <div class="form-grid">
+        <div class="form-group full">
+          <label class="form-label">Chemin de stockage</label>
+          <input id="set-prints-photo-path" value="${settings.prints_photo_path||'/opt/printflow/prints'}"
+                 placeholder="/opt/printflow/prints">
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">
+            Dossier sur le Raspberry Pi où sont stockées les photos des impressions.
+          </div>
+        </div>
       </div>
       <div style="margin-top:12px">
         <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
@@ -322,21 +387,6 @@ async function renderSettings() {
       </div>
     </div>
 
-    <!-- ── TigerTag Scale ───────────────────────── -->
-    <div class="card">
-      <div class="card-header"><span class="card-title">TigerTag Scale</span></div>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
-        Balance connectée ESP32 avec lecteur RFID. Quand une bobine est posée et stabilisée,
-        la pesée est créée automatiquement dans PrintFlow.
-      </p>
-      <div style="background:var(--bg3);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px">
-        <div style="font-weight:500;margin-bottom:6px">URL du webhook à configurer sur l'ESP32 :</div>
-        <code id="tigertag-webhook-url" style="color:var(--accent);font-size:12px"></code>
-        <div style="margin-top:6px;color:var(--text3)">Dans le firmware ESP32 — remplacer l'URL du cloud TigerTag par cette adresse.</div>
-      </div>
-      <div id="tigertag-recent" style="margin-top:8px"></div>
-    </div>
-
     <!-- ── Restauration ──────────────────────────── -->
     <div class="card">
       <div class="card-header"><span class="card-title">Restauration</span></div>
@@ -355,6 +405,81 @@ async function renderSettings() {
       </div>
       <div id="restore-preview" style="margin-top:10px;font-size:12px;color:var(--text3)"></div>
       <div id="restore-status" style="margin-top:8px;font-size:13px"></div>
+    </div>
+
+    <!-- ── Vider des données ──────────────────────── -->
+    <div id="purge-section-placeholder"></div>`;
+
+      loadBackupStatus();
+      API.get('/library/stats').then(function(stats) {
+        const el2 = document.getElementById('lib-stats-display');
+        if (!el2) return;
+        const fmt = function(b) { return b < 1048576 ? (b/1024).toFixed(0)+' Ko' : (b/1048576).toFixed(1)+' Mo'; };
+        el2.innerHTML = '<div style="display:flex;gap:16px;font-size:13px;flex-wrap:wrap">' +
+          '<span><strong>' + stats.file_count + '</strong> fichiers</span>' +
+          '<span>' + fmt(stats.total_size) + ' utilisés</span>' +
+          '<span style="font-size:12px;color:var(--text3)">' + stats.library_path + '</span>' +
+          '</div>';
+      }).catch(function() {});
+      renderPurgeSection();
+      break;
+
+    case 'integrations':
+      el.innerHTML = `
+    <!-- ── Spoolman ───────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Intégration Spoolman</span>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <span style="color:var(--text2)">Activer</span>
+          <div onclick="toggleSpoolman()" id="spoolman-toggle"
+               style="width:40px;height:22px;border-radius:11px;cursor:pointer;transition:background 0.2s;
+                      background:${spoolmanEnabled?'var(--accent)':'var(--border2)'};position:relative">
+            <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;
+                        top:2px;transition:left 0.2s;left:${spoolmanEnabled?'19px':'2px'}"></div>
+          </div>
+        </label>
+      </div>
+
+      <div id="spoolman-config" style="display:${spoolmanEnabled?'block':'none'}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <span class="badge ${spoolmanStatus.connected?'badge-success':'badge-danger'}">
+            ${spoolmanStatus.connected?'● Connecté':'● Déconnecté'}
+          </span>
+          ${spoolmanStatus.connected?`<span style="font-size:12px;color:var(--text3)">v${spoolmanStatus.version||'?'} · ${spoolmanStatus.url}</span>`:''}
+        </div>
+        <div class="form-grid">
+          <div class="form-group full">
+            <label class="form-label">URL Spoolman</label>
+            <input id="set-spoolman-url" value="${settings.spoolman_url||'http://localhost:7912'}" placeholder="http://localhost:7912">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
+          <button class="btn" onclick="testSpoolman()">Tester la connexion</button>
+          <button class="btn btn-success" onclick="syncSpoolmanSettings()">↻ Synchroniser les bobines</button>
+        </div>
+      </div>
+
+      <div id="spoolman-disabled-msg" style="display:${spoolmanEnabled?'none':'block'};
+           font-size:13px;color:var(--text3);padding:8px 0">
+        Activez l'intégration Spoolman pour synchroniser vos bobines automatiquement.
+      </div>
+    </div>
+
+    <!-- ── TigerTag Scale ───────────────────────── -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">TigerTag Scale</span></div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        Balance connectée ESP32 avec lecteur RFID. Quand une bobine est posée et stabilisée,
+        la pesée est créée automatiquement dans PrintFlow.
+      </p>
+      <div style="background:var(--bg3);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px">
+        <div style="font-weight:500;margin-bottom:6px">URL du webhook à configurer sur l'ESP32 :</div>
+        <code id="tigertag-webhook-url" style="color:var(--accent);font-size:12px"></code>
+        <div style="margin-top:6px;color:var(--text3)">Dans le firmware ESP32 — remplacer l'URL du cloud TigerTag par cette adresse.</div>
+      </div>
+      <div id="tigertag-recent" style="margin-top:8px"></div>
     </div>
 
     <!-- ── API & Intégrations ───────────────────── -->
@@ -390,23 +515,95 @@ async function renderSettings() {
       </div>
     </div>
 
-    <!-- ── PWA et Notifications ─────────────────── -->
+    <!-- ── Rapport hebdomadaire ──────────────────── -->
     <div class="card">
-      <div class="card-header"><span class="card-title">Application mobile (PWA)</span></div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
-        PrintFlow peut être installé comme application sur votre mobile ou tablette pour un accès rapide sans navigateur.
+      <div class="card-header">
+        <span class="card-title">📧 Rapport hebdomadaire</span>
+        <div onclick="toggleSetting('report_enabled', this)" id="toggle-report-enabled"
+             data-enabled="${settings.report_enabled==='true'?'1':'0'}"
+             style="width:40px;height:22px;border-radius:11px;cursor:pointer;transition:background 0.2s;
+                    background:${settings.report_enabled==='true'?'var(--accent)':'var(--border2)'};position:relative;flex-shrink:0">
+          <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;
+                      top:2px;transition:left 0.2s;left:${settings.report_enabled==='true'?'19px':'2px'}"></div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn btn-primary" onclick="installPWA()" id="pwa-install-btn-settings">
-          ↓ Installer l'application
-        </button>
-        <span style="font-size:12px;color:var(--text3)">
-          Sur iOS : Safari → Partager → Sur l'écran d'accueil
-        </span>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        Recevez chaque semaine un résumé de l'activité, de la consommation et des alertes par email.
+      </p>
+      <div id="report-config" style="display:${settings.report_enabled==='true'?'block':'none'}">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Email destinataire *</label>
+            <input id="set-report-email" type="email" value="${settings.report_email||''}" placeholder="vous@exemple.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Jour d'envoi</label>
+            <select id="set-report-day">
+              ${[['1','Lundi'],['2','Mardi'],['3','Mercredi'],['4','Jeudi'],['5','Vendredi'],['6','Samedi'],['7','Dimanche']]
+                .map(([v,l]) => '<option value="' + v + '"' + (settings.report_day===v?' selected':'') + '>' + l + '</option>').join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Heure d'envoi</label>
+            <select id="set-report-hour">
+              ${Array.from({length:24},(_,i)=>'<option value="'+i+'"'+(settings.report_hour==i?' selected':'')+'>'+String(i).padStart(2,'0')+'h00</option>').join('')}
+            </select>
+          </div>
+        </div>
+        <div style="border-top:0.5px solid var(--border2);padding-top:14px;margin-top:6px">
+          <div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:10px">Configuration SMTP</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Serveur SMTP *</label>
+              <input id="set-smtp-host" value="${settings.smtp_host||''}" placeholder="smtp.gmail.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Port</label>
+              <input id="set-smtp-port" type="number" value="${settings.smtp_port||'587'}" placeholder="587">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Utilisateur SMTP *</label>
+              <input id="set-smtp-user" value="${settings.smtp_user||''}" placeholder="vous@gmail.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mot de passe SMTP</label>
+              <input id="set-smtp-password" type="password" value="" placeholder="${settings.smtp_password ? '••••••••' : 'mot de passe'}">
+              <div style="font-size:11px;color:var(--text3);margin-top:3px">Chiffré AES-256 en base. Laisser vide pour ne pas modifier.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email expéditeur</label>
+              <input id="set-smtp-from" value="${settings.smtp_from||''}" placeholder="printflow@exemple.com">
+            </div>
+            <div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:20px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                <input type="checkbox" id="set-smtp-secure" ${settings.smtp_secure==='true'?'checked':''}>
+                SSL/TLS (port 465)
+              </label>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="testSmtpConnection()">🔌 Tester la connexion</button>
+            <button class="btn btn-sm btn-primary" onclick="sendTestReport()">📧 Envoyer un rapport test</button>
+          </div>
+          <div id="smtp-test-result" style="margin-top:8px;font-size:13px"></div>
+        </div>
       </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
+      </div>
+    </div>`;
+      if (typeof checkSpoolmanStatus === 'function') checkSpoolmanStatus();
+      var ttUrlEl = document.getElementById('tigertag-webhook-url');
+      if (ttUrlEl) ttUrlEl.textContent = window.location.origin + '/api/tigertag/webhook';
+      loadTigerTagRecent();
+      var apiBaseEl = document.getElementById('api-base-url');
+      var haUrlEl   = document.getElementById('ha-example-url');
+      if (apiBaseEl) apiBaseEl.textContent = window.location.origin + '/api';
+      if (haUrlEl)   haUrlEl.textContent   = window.location.origin;
+      break;
 
-    </div>
-
+    case 'imprimantes':
+      el.innerHTML = `
     <!-- ── Imprimantes ────────────────────────────── -->
     <div class="card">
       <div class="card-header"><span class="card-title">Accès interfaces imprimantes</span></div>
@@ -418,48 +615,71 @@ async function renderSettings() {
       </table>
     </div>
 
+    <!-- ── Consommables — modèles prédéfinis ────── -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Consommables — modèles prédéfinis</span>
+        <button class="btn btn-sm btn-primary" onclick="openAddConsumableTemplate()">+ Nouveau modèle</button>
+      </div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        Ces modèles apparaissent comme suggestions lors de l'ajout d'un consommable sur une imprimante.
+        Modifiez les intervalles selon votre matériel.
+      </p>
+      <div id="consumable-templates-list">
+        <div style="color:var(--text3);font-size:13px">Chargement…</div>
+      </div>
+    </div>`;
+      API.get('/printers').then(function(printers) {
+        const el2 = document.getElementById('printer-access-table');
+        if (!el2) return;
+        el2.innerHTML = printers.map(function(p) {
+          return '<tr>' +
+            '<td>' + p.name + '</td>' +
+            '<td>' + interfaceTypeLabel(p.interface_type) + '</td>' +
+            '<td style="font-size:12px;color:var(--text3)">' + (p.interface_url||'Non configurée') + '</td>' +
+            '<td>' + (p.interface_url
+              ? '<button class="btn btn-sm btn-primary" onclick="openPrinterIframe(' + JSON.stringify(p).replace(/"/g, '&quot;') + ')">Ouvrir</button>'
+              : '<span style="color:var(--text3);font-size:12px">—</span>') + '</td>' +
+          '</tr>';
+        }).join('');
+      });
+      loadConsumableTemplates();
+      break;
+
+    case 'systeme':
+      el.innerHTML = `
     <!-- ── Système ────────────────────────────────── -->
     <div class="card">
       <div class="card-header"><span class="card-title">Informations système</span></div>
+      <div class="stat-row"><span class="stat-label">Application</span><span class="stat-val">${settings.app_name||'PrintFlow-3D'}</span></div>
+      <div class="stat-row"><span class="stat-label">Version</span><span class="stat-val">${settings._version || '1.9.0'}</span></div>
+      <div class="stat-row"><span class="stat-label">Date de build</span><span class="stat-val">${settings._build_date || '—'}</span></div>
       <div class="stat-row"><span class="stat-label">Backend</span><span class="stat-val">Node.js + Express</span></div>
       <div class="stat-row"><span class="stat-label">Base de données</span><span class="stat-val">MariaDB</span></div>
-      <div class="stat-row"><span class="stat-label">Version</span><span class="stat-val">${settings._version || '1.6.0'}</span></div>
-      <div class="stat-row"><span class="stat-label">Date de build</span><span class="stat-val">05/04/2026 09:47</span></div>
+      <div class="stat-row" id="os-version-row"><span class="stat-label">Système d'exploitation</span><span class="stat-val" id="os-version-val">Chargement…</span></div>
     </div>`;
+      // Charger la version OS
+      API.get('/settings/os-info').then(function(info) {
+        var el2 = document.getElementById('os-version-val');
+        if (el2) el2.textContent = info.os || '—';
+      }).catch(function() {
+        var el2 = document.getElementById('os-version-val');
+        if (el2) el2.textContent = '—';
+      });
+      break;
+      break;
+  }
+}
 
-  // Stats bibliothèque
-  API.get('/library/stats').then(stats => {
-    const el = document.getElementById('lib-stats-display');
-    if (!el) return;
-    const fmt = b => b < 1048576 ? (b/1024).toFixed(0)+' Ko' : (b/1048576).toFixed(1)+' Mo';
-    el.innerHTML = `<div style="display:flex;gap:16px;flex-wrap:wrap">
-      <span>${stats.total_objects||0} objet${stats.total_objects>1?'s':''}</span>
-      <span>${stats.total_files} fichier${stats.total_files>1?'s':''}</span>
-      <span>${fmt(stats.total_size)} utilisés</span>
-      <span style="color:var(--text3);font-size:12px">${stats.library_path}</span>
-    </div>`;
-  }).catch(() => {});
-
-  // Backup status
-  loadBackupStatus();
-
-  // TigerTag webhook URL — remplir immédiatement après rendu HTML
-  const ttUrlEl = document.getElementById('tigertag-webhook-url');
-  if (ttUrlEl) ttUrlEl.textContent = window.location.origin + '/api/tigertag/webhook';
-  loadTigerTagRecent();
-
-  // Table imprimantes
-  API.get('/printers').then(printers => {
-    document.getElementById('printer-access-table').innerHTML = printers.map(p => `
-      <tr>
-        <td>${p.name}</td>
-        <td>${interfaceTypeLabel(p.interface_type)}</td>
-        <td style="font-size:12px;color:var(--text3)">${p.interface_url||'Non configurée'}</td>
-        <td>${p.interface_url
-          ? `<button class="btn btn-sm btn-primary" onclick="openPrinterIframe(${JSON.stringify(p).replace(/"/g,'&quot;')})">Ouvrir</button>`
-          : '<span style="color:var(--text3);font-size:12px">—</span>'}</td>
-      </tr>`).join('');
+function switchSettingsTab(tab, btn) {
+  window._settingsTab = tab;
+  document.querySelectorAll('[onclick^="switchSettingsTab"]').forEach(function(b) {
+    const active = b === btn;
+    b.style.fontWeight   = active ? '600' : '400';
+    b.style.color        = active ? 'var(--accent)' : 'var(--text2)';
+    b.style.borderBottom = active ? '2px solid var(--accent)' : '2px solid transparent';
   });
+  renderSettings();
 }
 
 // ── Toggle générique pour settings booléens ─────────────
@@ -487,6 +707,20 @@ function toggleSetting(key, el) {
   if (key === 'auth_enabled') {
     const cfg = document.getElementById('auth-config');
     if (cfg) cfg.style.display = enabled ? 'block' : 'none';
+  }
+  if (key === 'projects_enabled') {
+    window._projectsEnabled = enabled;
+    const navProjects = document.getElementById('nav-projects');
+    if (navProjects) navProjects.style.display = enabled ? '' : 'none';
+    // Si on désactive et qu'on est sur l'onglet projets → revenir au dashboard
+    if (!enabled && window._currentTab === 'projects') {
+      switchTab('dashboard');
+    }
+  
+  }
+  if (key === 'report_enabled') {
+    var cfgEl = document.getElementById('report-config');
+    if (cfgEl) cfgEl.style.display = enabled ? 'block' : 'none';
   }
 }
 
@@ -549,14 +783,20 @@ function selectTheme(name) {
 
 // ── Sauvegarder tous les paramètres ──────────────────────
 async function saveSettings() {
-  const togPrices = document.getElementById('toggle-show-prices');
-  const togLocs   = document.getElementById('toggle-show-locations');
+  const togPrices    = document.getElementById('toggle-show-prices');
+  const togLocs      = document.getElementById('toggle-show-locations');
+  const togProjects  = document.getElementById('toggle-projects-enabled');
   const body = {
     app_name:       document.getElementById('set-app-name')?.value,
-    library_path:   document.getElementById('set-library-path')?.value,
+    library_path:        document.getElementById('set-library-path')?.value,
+    prints_photo_path:   document.getElementById('set-prints-photo-path')?.value,
     theme:          document.getElementById('set-theme')?.value || 'blue',
-    show_prices:           togPrices ? String(togPrices.dataset.enabled === '1') : 'true',
-    show_locations:        togLocs   ? String(togLocs.dataset.enabled   === '1') : 'true',
+    color_mode:     document.getElementById('set-color-mode')?.value || '',
+    dark_from:      document.getElementById('set-dark-from')?.value || '20',
+    dark_to:        document.getElementById('set-dark-to')?.value || '7',
+    show_prices:           togPrices   ? String(togPrices.dataset.enabled   === '1') : 'true',
+    show_locations:        togLocs     ? String(togLocs.dataset.enabled     === '1') : 'true',
+    projects_enabled:      togProjects ? String(togProjects.dataset.enabled === '1') : 'true',
     stock_alert_enabled:        document.getElementById('toggle-stock-alert')?.dataset.enabled === '1' ? 'true' : 'false',
     stock_alert_threshold:      document.getElementById('set-stock-threshold')?.value || '20',
     maintenance_alert_enabled:  document.getElementById('toggle-maintenance-alert')?.dataset.enabled === '1' ? 'true' : 'false',
@@ -878,5 +1118,324 @@ async function loadTigerTagRecent() {
       '</tbody></table>';
   } catch(_) {
     el.innerHTML = '<p style="font-size:12px;color:var(--text3)">TigerTag Scale non connecté.</p>';
+  }
+}
+
+// ── Consommables — modèles prédéfinis ──────────────────────────────────────
+async function loadConsumableTemplates() {
+  const el = document.getElementById('consumable-templates-list');
+  if (!el) return;
+  try {
+    const templates = await API.get('/consumables/templates');
+    if (!templates.length) {
+      el.innerHTML = '<p style="color:var(--text3);font-size:13px">Aucun modèle disponible.</p>';
+      return;
+    }
+    el.innerHTML =
+      '<table>' +
+        '<thead><tr><th>Nom</th><th>Intervalle</th><th>Description</th><th></th></tr></thead>' +
+        '<tbody>' +
+        templates.map(function(t) {
+          return '<tr>' +
+            '<td style="font-weight:500;font-size:13px">' + t.name + '</td>' +
+            '<td style="font-size:13px">' + t.default_hours + 'h</td>' +
+            '<td style="font-size:12px;color:var(--text3)">' + (t.description||'—') + '</td>' +
+            '<td><div class="td-actions">' +
+              '<button class="btn btn-sm" onclick="editConsumableTemplate(' + t.id + ')">✏</button>' +
+              '<button class="btn btn-sm btn-danger" onclick="deleteConsumableTemplate(' + t.id + ')">✕</button>' +
+            '</div></td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody>' +
+      '</table>';
+  } catch(e) {
+    el.innerHTML = '<p style="color:var(--danger);font-size:13px">Erreur : ' + e.message + '</p>';
+  }
+}
+
+function openAddConsumableTemplate() {
+  openModal(
+    '<div class="form-grid">' +
+      '<div class="form-group full"><label class="form-label">Nom du consommable *</label>' +
+        '<input id="ct-name" placeholder="ex: Huile rails X/Y"></div>' +
+      '<div class="form-group"><label class="form-label">Intervalle par défaut (heures) *</label>' +
+        '<input id="ct-hours" type="number" min="1" placeholder="200"></div>' +
+      '<div class="form-group full"><label class="form-label">Description</label>' +
+        '<input id="ct-desc" placeholder="ex: Lubrification des rails de guidage"></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="saveConsumableTemplate(null)">Ajouter</button>' +
+    '</div>',
+    'Nouveau modèle de consommable'
+  );
+}
+
+async function editConsumableTemplate(id) {
+  const templates = await API.get('/consumables/templates').catch(() => []);
+  const t = templates.find(function(x) { return x.id === id; });
+  if (!t) return toast('Modèle introuvable', 'error');
+  openModal(
+    '<div class="form-grid">' +
+      '<div class="form-group full"><label class="form-label">Nom *</label>' +
+        '<input id="ct-name" value="' + t.name + '"></div>' +
+      '<div class="form-group"><label class="form-label">Intervalle (heures) *</label>' +
+        '<input id="ct-hours" type="number" min="1" value="' + t.default_hours + '"></div>' +
+      '<div class="form-group full"><label class="form-label">Description</label>' +
+        '<input id="ct-desc" value="' + (t.description||'') + '"></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="saveConsumableTemplate(' + id + ')">Enregistrer</button>' +
+    '</div>',
+    'Modifier — ' + t.name
+  );
+}
+
+async function saveConsumableTemplate(id) {
+  const name  = document.getElementById('ct-name')?.value?.trim();
+  const hours = parseInt(document.getElementById('ct-hours')?.value);
+  const desc  = document.getElementById('ct-desc')?.value?.trim();
+  if (!name)       return toast('Le nom est requis', 'error');
+  if (!hours || hours < 1) return toast('L\'intervalle doit être > 0', 'error');
+  try {
+    if (id) {
+      await API.put('/consumables/templates/' + id, { name, default_hours: hours, description: desc });
+      toast('Modèle mis à jour ✓', 'success');
+    } else {
+      await API.post('/consumables/templates', { name, default_hours: hours, description: desc });
+      toast('Modèle ajouté ✓', 'success');
+    }
+    closeModal();
+    loadConsumableTemplates();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteConsumableTemplate(id) {
+  confirmDelete('Supprimer ce modèle de consommable ?', async function() {
+    try {
+      await API.del('/consumables/templates/' + id);
+      toast('Modèle supprimé', 'success');
+      loadConsumableTemplates();
+    } catch(e) { toast(e.message, 'error'); }
+  });
+}
+
+// ── SMTP — test connexion et envoi rapport test ────────────────────────────
+async function testSmtpConnection() {
+  var resultEl = document.getElementById('smtp-test-result');
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--text3)">Test en cours…</span>';
+  try {
+    await saveSmtpConfig();
+    var r = await API.post('/report/test-smtp', {});
+    if (resultEl) resultEl.innerHTML = '<span style="color:#10b981">✓ ' + r.message + '</span>';
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger)">✗ ' + e.message + '</span>';
+  }
+}
+
+async function sendTestReport() {
+  var resultEl = document.getElementById('smtp-test-result');
+  if (resultEl) resultEl.innerHTML = '<span style="color:var(--text3)">Envoi en cours…</span>';
+  try {
+    await saveSmtpConfig();
+    var r = await API.post('/report/send-test', {});
+    if (resultEl) resultEl.innerHTML = '<span style="color:#10b981">✓ ' + r.message + '</span>';
+    toast('Rapport de test envoyé ✓', 'success');
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger)">✗ ' + e.message + '</span>';
+  }
+}
+
+async function saveSmtpConfig() {
+  var togReport = document.getElementById('toggle-report-enabled');
+  var body = {
+    enabled:       togReport ? togReport.dataset.enabled === '1' : false,
+    email:         document.getElementById('set-report-email')?.value || '',
+    day:           document.getElementById('set-report-day')?.value || '1',
+    hour:          document.getElementById('set-report-hour')?.value || '8',
+    smtp_host:     document.getElementById('set-smtp-host')?.value || '',
+    smtp_port:     document.getElementById('set-smtp-port')?.value || '587',
+    smtp_secure:   document.getElementById('set-smtp-secure')?.checked || false,
+    smtp_user:     document.getElementById('set-smtp-user')?.value || '',
+    smtp_password: document.getElementById('set-smtp-password')?.value || '',
+    smtp_from:     document.getElementById('set-smtp-from')?.value || '',
+  };
+  await API.put('/report/config', body);
+}
+
+// ── Rendu de la section purge (JS pur, pas de template literal) ──────────
+function renderPurgeSection() {
+  var placeholder = document.getElementById('purge-section-placeholder');
+  if (!placeholder) return;
+
+  var card = document.createElement('div');
+  card.className = 'card';
+  card.style.border = '1px solid rgba(239,68,68,0.2)';
+
+  var items = [
+    { id:'purge-prints',      label:'\uD83D\uDDA8 Impressions',         danger:false, cnt:'cnt-prints'      },
+    { id:'purge-weighings',   label:'\u2696 Pes\u00E9es',               danger:false, cnt:'cnt-weighings'   },
+    { id:'purge-maintenance', label:'\uD83D\uDD27 Maintenances',        danger:false, cnt:'cnt-maintenance'  },
+    { id:'purge-consumables', label:'\uD83D\uDD29 Consommables',        danger:false, cnt:'cnt-consumables'  },
+    { id:'purge-projects',    label:'\uD83D\uDCCB Projets',             danger:false, cnt:'cnt-projects'     },
+    { id:'purge-history',     label:'\uD83D\uDCDC Historique',          danger:false, cnt:'cnt-history'      },
+    { id:'purge-filaments',   label:'\uD83E\uDDF5 Filaments',           danger:true,  cnt:'cnt-filaments'    },
+    { id:'purge-printers',    label:'\uD83D\uDDA8 Imprimantes',         danger:true,  cnt:'cnt-printers'     },
+    { id:'purge-library',     label:'\uD83D\uDCDA Biblioth\u00E8que',   danger:true,  cnt:'cnt-library', full:true },
+  ];
+
+  var html =
+    '<div class="card-header">' +
+      '<span class="card-title" style="color:var(--danger)">\uD83D\uDDD1 Vider des donn\u00E9es</span>' +
+    '</div>' +
+    '<p style="font-size:13px;color:var(--text2);margin-bottom:14px">' +
+      'Supprime d\u00E9finitivement les donn\u00E9es s\u00E9lectionn\u00E9es. Les param\u00E8tres et mod\u00E8les de consommables ne sont jamais affect\u00E9s. ' +
+      '<strong style="color:var(--danger)">Action irr\u00E9versible.</strong>' +
+    '</p>' +
+    '<div id="purge-stats-display" style="margin-bottom:14px">' +
+      '<button class="btn btn-sm" onclick="loadPurgeStats()">Afficher les compteurs</button>' +
+    '</div>' +
+    '<div id="purge-form" style="display:none">' +
+      '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">' +
+      items.map(function(item) {
+        var border = item.danger ? 'border:1px solid rgba(239,68,68,0.3);' : '';
+        return '<label class="purge-check" style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);' + border + '">' +
+          '<input type="checkbox" id="' + item.id + '" onchange="updatePurgeBtn()" style="flex-shrink:0;width:16px;height:16px">' +
+          '<span style="flex:1">' + item.label + '</span>' +
+          '<span id="' + item.cnt + '" style="font-size:11px;color:var(--text3)"></span>' +
+        '</label>';
+      }).join('') +
+      '</div>' +
+      '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);padding:12px;margin-bottom:12px;box-sizing:border-box;width:100%">' +
+        '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;width:100%">' +
+          '<input type="checkbox" id="purge-confirm" onchange="updatePurgeBtn()" style="margin-top:2px;flex-shrink:0;width:16px;height:16px">' +
+          '<span style="color:var(--danger);flex:1;min-width:0;word-break:break-word">Je comprends que cette action est <strong>d\u00E9finitive et irr\u00E9versible</strong>. Les donn\u00E9es supprim\u00E9es ne pourront pas \u00EAtre r\u00E9cup\u00E9r\u00E9es.</span>' +
+        '</label>' +
+      '</div>' +
+      '<button class="btn btn-danger" id="btn-purge" onclick="executePurge()" disabled style="opacity:0.5">' +
+        '\uD83D\uDDD1 Vider les donn\u00E9es s\u00E9lectionn\u00E9es' +
+      '</button>' +
+      '<div id="purge-status" style="margin-top:10px;font-size:13px"></div>' +
+    '</div>';
+
+  card.innerHTML = html;
+  placeholder.replaceWith(card);
+}
+
+// ── Purge des données ──────────────────────────────────────────────────────
+async function loadPurgeStats() {
+  const el = document.getElementById('purge-stats-display');
+  const form = document.getElementById('purge-form');
+  if (el) el.innerHTML = '<span style="color:var(--text3);font-size:13px">Chargement…</span>';
+  try {
+    const stats = await API.get('/settings/purge-stats');
+    if (el) el.innerHTML = '';
+    if (form) form.style.display = 'block';
+
+    // Afficher les compteurs
+    const map = {
+      'cnt-prints':       (stats.prints||0) + ' impression' + (stats.prints!=1?'s':'') +
+                          ', ' + (stats.print_filaments||0) + ' entrée(s) filament',
+      'cnt-weighings':    (stats.filament_weighings||0) + ' pesée' + (stats.filament_weighings!=1?'s':''),
+      'cnt-maintenance':  (stats.maintenance||0) + ' entrée' + (stats.maintenance!=1?'s':''),
+      'cnt-consumables':  (stats.consumables||0) + ' consommable' + (stats.consumables!=1?'s':''),
+      'cnt-projects':     (stats.projects||0) + ' projet' + (stats.projects!=1?'s':''),
+      'cnt-history':      (stats.history_log||0) + ' entrée' + (stats.history_log!=1?'s':''),
+      'cnt-filaments':    (stats.filaments||0) + ' bobine' + (stats.filaments!=1?'s':''),
+      'cnt-printers':     (stats.printers||0) + ' imprimante' + (stats.printers!=1?'s':''),
+      'cnt-library':      (stats.library_objects||0) + ' objet' + (stats.library_objects!=1?'s':'') +
+                          ', ' + (stats.library_files||0) + ' fichier' + (stats.library_files!=1?'s':''),
+    };
+    Object.entries(map).forEach(function([id, text]) {
+      var el2 = document.getElementById(id);
+      if (el2) el2.textContent = '(' + text + ')';
+    });
+  } catch(e) {
+    if (el) el.innerHTML = '<span style="color:var(--danger);font-size:13px">Erreur : ' + e.message + '</span>';
+  }
+}
+
+function updatePurgeBtn() {
+  var btn     = document.getElementById('btn-purge');
+  var confirm = document.getElementById('purge-confirm');
+  if (!btn || !confirm) return;
+  var hasSelection = ['purge-prints','purge-weighings','purge-maintenance','purge-consumables',
+    'purge-projects','purge-history','purge-filaments','purge-printers','purge-library']
+    .some(function(id) { var el = document.getElementById(id); return el && el.checked; });
+  var active = confirm.checked && hasSelection;
+  btn.disabled    = !active;
+  btn.style.opacity = active ? '1' : '0.5';
+}
+
+// Mettre à jour le bouton quand on coche/décoche une table
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.closest && e.target.closest('.purge-check')) {
+    updatePurgeBtn();
+  }
+});
+
+async function executePurge() {
+  var confirm = document.getElementById('purge-confirm');
+  if (!confirm || !confirm.checked) return;
+
+  // Collecter les tables sélectionnées
+  var tables = [];
+  var checkMap = {
+    'purge-prints':       ['prints', 'print_filaments'],
+    'purge-weighings':    ['filament_weighings'],
+    'purge-maintenance':  ['maintenance'],
+    'purge-consumables':  ['consumables'],
+    'purge-projects':     ['projects'],
+    'purge-history':      ['history_log'],
+    'purge-filaments':    ['filaments'],
+    'purge-printers':     ['printers'],
+    'purge-library':      ['library_files', 'library_objects'],
+  };
+  Object.entries(checkMap).forEach(function([id, tbl]) {
+    var el = document.getElementById(id);
+    if (el && el.checked) tables = tables.concat(tbl);
+  });
+
+  if (!tables.length) return toast('Sélectionnez au moins une table', 'error');
+
+  var statusEl = document.getElementById('purge-status');
+  var btn      = document.getElementById('btn-purge');
+  if (btn) { btn.disabled = true; btn.textContent = 'Suppression en cours…'; }
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--text3)">Suppression en cours…</span>';
+
+  try {
+    var result = await API.post('/settings/purge', { tables, confirm: true });
+    var total = Object.values(result.deleted).reduce(function(s, n) { return s + n; }, 0);
+    var details = Object.entries(result.deleted)
+      .filter(function(e) { return e[1] > 0; })
+      .map(function(e) { return e[1] + ' ' + e[0]; })
+      .join(', ');
+    if (statusEl) statusEl.innerHTML =
+      '<span style="color:#10b981">✓ ' + total + ' enregistrement' + (total!=1?'s':'') + ' supprimé' + (total!=1?'s':'') +
+      (details ? ' (' + details + ')' : '') + '</span>';
+    toast('Données vidées ✓', 'success');
+    // Réinitialiser le formulaire
+    if (confirm) confirm.checked = false;
+    document.querySelectorAll('.purge-check input[type=checkbox]').forEach(function(el) { el.checked = false; });
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.textContent = '🗑 Vider les données sélectionnées'; }
+    // Recharger les compteurs
+    setTimeout(loadPurgeStats, 500);
+  } catch(e) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">Erreur : ' + e.message + '</span>';
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '🗑 Vider les données sélectionnées'; }
+  }
+}
+
+// ── Mode sombre ────────────────────────────────────────────────────────────
+function previewColorMode(mode) {
+  // Afficher/masquer les sélecteurs d'heure
+  var wrap = document.getElementById('color-mode-time-wrap');
+  if (wrap) wrap.style.display = mode === 'auto-time' ? 'flex' : 'none';
+  // Prévisualiser immédiatement
+  if (typeof applyColorMode === 'function') {
+    var from = document.getElementById('set-dark-from')?.value || '20';
+    var to   = document.getElementById('set-dark-to')?.value   || '7';
+    applyColorMode(mode || null, from, to);
   }
 }

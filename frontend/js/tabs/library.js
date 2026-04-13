@@ -217,9 +217,11 @@ function objectCardList(o) {
       (tags.length ? '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">' +
         tags.map(function(t){ return '<span style="font-size:10px;padding:1px 6px;background:var(--bg3);border-radius:20px;color:var(--text2)">#' + t + '</span>'; }).join('') +
         '</div>' : '') +
+      (o.source_url ? '<div style="margin-top:5px">' + renderSourceBadge(o.source_url) + '</div>' : '') +
     '</div>' +
     '<div style="display:flex;gap:5px;flex-shrink:0">' +
       '<button class="btn btn-sm btn-primary" onclick="openObjectDetail(' + o.id + ')">Ouvrir</button>' +
+      '<button class="btn btn-sm" title="QR Code" onclick="openQRCode(' + o.id + ',\'' + o.name.replace(/'/g,"\\'") + '\')">▦</button>' +
       '<button class="btn btn-sm" onclick="openObjectForm(' + o.id + ')">✏</button>' +
       '<button class="btn btn-sm btn-danger" onclick="deleteObject(' + o.id + ')">✕</button>' +
     '</div></div>';
@@ -261,71 +263,139 @@ function fileCard(f) {
 
 // ── Détail objet ──────────────────────────────────────────
 async function openObjectDetail(id) {
-  const obj = await API.get('/library/objects/'+id);
-  const totalSize = obj.files.reduce((s,f)=>s+(f.file_size||0),0);
+  const [obj, linkedPrints] = await Promise.all([
+    API.get('/library/objects/' + id),
+    API.get('/prints?limit=200').then(function(prints) {
+      return prints.filter(function(p) { return String(p.library_object_id) === String(id); });
+    }).catch(() => []),
+  ]);
+  const totalSize = obj.files.reduce(function(s,f){ return s+(f.file_size||0); }, 0);
+  const photoUrl  = obj.photo_path ? '/api/library/objects/' + obj.id + '/photo' : null;
 
-  const photoUrl = obj.photo_path ? '/api/library/objects/' + obj.id + '/photo' : null;
-  openModal(`
-    <div style="margin-bottom:16px">
-      ${photoUrl ? `
-      <div style="margin-bottom:12px;border-radius:var(--radius-lg);overflow:hidden;
-                  max-height:220px;background:var(--bg3)">
-        <img src="${photoUrl}" alt="${obj.name}"
-             style="width:100%;max-height:220px;object-fit:cover;display:block"
-             onerror="this.parentElement.style.display='none'">
-      </div>` : ''}
-      <div style="font-size:16px;font-weight:500;margin-bottom:4px">${obj.name}</div>
-      ${obj.theme_name ? `<span style="font-size:12px;color:var(--text3)">${obj.theme_name}</span>` : ''}
-      ${obj.description ? `<p style="font-size:13px;color:var(--text2);margin-top:8px">${obj.description}</p>` : ''}
-      ${obj.tags ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">
-        ${obj.tags.split(',').map(t=>`<span style="font-size:10px;padding:2px 7px;background:var(--bg3);border-radius:20px;color:var(--text2)">#${t.trim()}</span>`).join('')}
-      </div>` : ''}
-    </div>
+  // Calculs notation
+  const ratedPrints = linkedPrints.filter(function(p) { return p.rating; });
+  const avgRating   = ratedPrints.length
+    ? (ratedPrints.reduce(function(s,p){ return s+p.rating; }, 0) / ratedPrints.length).toFixed(1)
+    : null;
+  const bestPrint = linkedPrints.reduce(function(best,p) {
+    return (!best || (p.rating||0) > (best.rating||0)) ? p : best;
+  }, null);
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span class="form-label">${obj.files.length} fichier${obj.files.length!=1?'s':''} · ${formatFileSize(totalSize)}</span>
-      <button class="btn btn-sm btn-primary" onclick="openUploadForm(${id})">+ Ajouter un fichier</button>
-    </div>
+  // Section impressions liées
+  const printsHtml = linkedPrints.length > 0
+    ? '<div style="margin-bottom:16px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+          '<div style="font-size:13px;font-weight:500;color:var(--text2)">🖨 ' + linkedPrints.length +
+            ' impression' + (linkedPrints.length>1?'s':'') + ' liée' + (linkedPrints.length>1?'s':'') + '</div>' +
+          (avgRating ? '<div style="display:flex;align-items:center;gap:5px">' +
+            '<span style="font-size:13px;color:#f59e0b">★</span>' +
+            '<span style="font-size:13px;font-weight:500">' + avgRating + '</span>' +
+            '<span style="font-size:11px;color:var(--text3)">/ 5 (' + ratedPrints.length + ' noté' + (ratedPrints.length>1?'s':'') + ')</span>' +
+          '</div>' : '') +
+        '</div>' +
+        (bestPrint && bestPrint.rating >= 4 ?
+          '<div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:var(--radius);padding:8px 12px;margin-bottom:8px;border:1px solid #fbbf24">' +
+            '<div style="font-size:11px;font-weight:500;color:#92400e;margin-bottom:4px">⭐ Meilleure impression</div>' +
+            '<div style="display:flex;align-items:center;gap:8px">' +
+              '<span style="font-size:13px;font-weight:500;flex:1">' + bestPrint.name + '</span>' +
+              '<span style="color:#f59e0b;font-size:14px">' + '★'.repeat(bestPrint.rating) + '</span>' +
+              '<button class="btn btn-sm" onclick="closeModal();setTimeout(function(){openPrintDetail(' + bestPrint.id + ')},100)">Détail</button>' +
+            '</div>' +
+            (bestPrint.layer_height || bestPrint.infill_percent || bestPrint.print_temp ?
+              '<div style="font-size:11px;color:#92400e;margin-top:4px">' +
+              (bestPrint.layer_height ? 'Couche: ' + bestPrint.layer_height + 'mm ' : '') +
+              (bestPrint.infill_percent ? '· Remplissage: ' + bestPrint.infill_percent + '% ' : '') +
+              (bestPrint.print_temp ? '· Buse: ' + bestPrint.print_temp + '°C' : '') + '</div>' : '') +
+          '</div>' : '') +
+        '<div style="display:flex;flex-direction:column;gap:6px">' +
+        linkedPrints.slice(0,5).map(function(p) {
+          const stars = p.rating ? '<span style="color:#f59e0b;font-size:12px">' + '★'.repeat(p.rating) + '☆'.repeat(5-p.rating) + '</span>' : '';
+          return '<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 10px;background:var(--bg3);border-radius:var(--radius)">' +
+            (p.color_hex ? '<span style="width:8px;height:8px;border-radius:50%;background:' + p.color_hex + ';flex-shrink:0;display:inline-block"></span>' : '') +
+            '<span style="flex:1">' + p.name + '</span>' + stars +
+            '<span style="color:var(--text3)">' + fmtDate(p.created_at) + '</span>' +
+            statusBadge(p.status) +
+            '<button class="btn btn-sm" onclick="closeModal();setTimeout(function(){openPrintDetail(' + p.id + ')},100)">Détail</button>' +
+          '</div>';
+        }).join('') +
+        (linkedPrints.length > 5 ? '<div style="font-size:11px;color:var(--text3);text-align:center;margin-top:4px">' + (linkedPrints.length-5) + ' autres impression(s)…</div>' : '') +
+      '</div></div>'
+    : '';
 
-    ${obj.files.length === 0
-      ? `<p style="color:var(--text3);font-size:13px;padding:12px 0">Aucun fichier. Cliquez "+ Ajouter un fichier".</p>`
-      : `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-          ${obj.files.map(f => {
-            const ext = (f.file_type||'').toUpperCase();
-            const extColor = {STL:'#185FA5','3MF':'#1D9E75',OBJ:'#BA7517',GCODE:'#888780',STEP:'#534AB7'}[ext]||'#888780';
-            return `
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;
-                        background:var(--bg3);border-radius:var(--radius)">
-              <span style="font-size:10px;font-weight:700;color:${extColor};
-                           background:${extColor}18;padding:3px 6px;border-radius:4px;
-                           white-space:nowrap">${ext}</span>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;font-weight:500">${f.part_name||f.name}</div>
-                ${f.recommended_materials ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' +
-                  f.recommended_materials.split(',').map(function(m){ return '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--accent-bg);color:var(--accent)">' + m + '</span>'; }).join('') +
-                  '</div>' : ''}
-                <div style="font-size:11px;color:var(--text3)">${f.original_name} · ${formatFileSize(f.file_size)}</div>
-              </div>
-              <a href="/api/library/files/${f.id}/download"
-                 class="btn btn-sm" style="text-decoration:none">↓</a>
-              ${['stl','3mf','obj'].includes((f.file_type||'').toLowerCase()) ? '<button class="btn btn-sm" onclick="openSTLPreview(' + f.id + ',\'' + (f.part_name||f.name).replace(/'/g,"\\'") + '\')" title="Prévisualiser 3D">👁 3D</button>' : ''}
-              <button class="btn btn-sm" onclick="openFileEditForm(${f.id})" title="Modifier matières et infos">⚙</button>
-              <button class="btn btn-sm" onclick="openPartNameEdit(${id},${f.id},'${(f.part_name||f.name).replace(/'/g,"\\'")}')">✏</button>
-              <button class="btn btn-sm btn-danger" onclick="removeFileFromObject(${id},${f.id})">✕</button>
-            </div>`;
-          }).join('')}
-         </div>`}
+  // Section fichiers
+  const filesHtml = obj.files.length === 0
+    ? '<p style="color:var(--text3);font-size:13px;padding:12px 0">Aucun fichier. Cliquez "+ Ajouter un fichier".</p>'
+    : '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
+        obj.files.map(function(f) {
+          const ext      = (f.file_type||'').toUpperCase();
+          const extColor = {STL:'#185FA5','3MF':'#1D9E75',OBJ:'#BA7517',GCODE:'#888780',STEP:'#534AB7'}[ext]||'#888780';
+          const is3d     = ['stl','3mf','obj'].includes((f.file_type||'').toLowerCase());
+          const safeN    = (f.part_name||f.name).replace(/'/g,"\\'");
+          return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius)">' +
+            '<span style="font-size:10px;font-weight:700;color:' + extColor + ';background:' + extColor + '18;padding:3px 6px;border-radius:4px;white-space:nowrap">' + ext + '</span>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+                '<span style="font-size:13px;font-weight:500">' + (f.part_name||f.name) + '</span>' +
+                (f.version ? '<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:var(--accent-bg);color:var(--accent);font-weight:500">' + f.version + '</span>' : '') +
+              '</div>' +
+              (f.changelog ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic">↳ ' + f.changelog + '</div>' : '') +
+              (f.recommended_materials ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' +
+                f.recommended_materials.split(',').map(function(m){ return '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--accent-bg);color:var(--accent)">' + m + '</span>'; }).join('') +
+              '</div>' : '') +
+              '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + f.original_name + ' · ' + formatFileSize(f.file_size) + '</div>' +
+              (f.version_history && f.version_history.length > 1 ?
+                '<button onclick="toggleVersionHistory(' + f.id + ')" style="font-size:10px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;margin-top:2px">' +
+                  (f.version_history.length-1) + ' version(s) précédente(s) ▾' +
+                '</button><div id="vh-' + f.id + '" style="display:none;margin-top:4px"></div>' : '') +
+            '</div>' +
+            '<a href="/api/library/files/' + f.id + '/download" class="btn btn-sm" style="text-decoration:none">↓</a>' +
+            (is3d ? '<button class="btn btn-sm" onclick="openSTLPreview(' + f.id + ',\'' + safeN + '\')" title="Prévisualiser 3D">👁 3D</button>' : '') +
+            '<button class="btn btn-sm" title="Nouvelle version" onclick="openNewVersionForm(' + f.id + ',\'' + safeN + '\',' + id + ')">⬆ v+</button>' +
+            '<button class="btn btn-sm" onclick="openFileEditForm(' + f.id + ')" title="Modifier matières et infos">⚙</button>' +
+            '<button class="btn btn-sm" onclick="openPartNameEdit(' + id + ',' + f.id + ',\'' + safeN + '\')">✏</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="removeFileFromObject(' + id + ',' + f.id + ')">✕</button>' +
+          '</div>';
+        }).join('') +
+      '</div>';
 
-    ${obj.source_url ? `<a href="${obj.source_url}" target="_blank" style="font-size:12px;color:var(--accent)">↗ Source</a>` : ''}
+  // Photo
+  const photoHtml = photoUrl
+    ? '<div style="margin-bottom:12px;border-radius:var(--radius-lg);overflow:hidden;max-height:220px;background:var(--bg3)">' +
+        '<img src="' + photoUrl + '" alt="' + obj.name + '" style="width:100%;max-height:220px;object-fit:cover;display:block" onerror="this.parentElement.style.display=\'none\'">' +
+      '</div>'
+    : '';
 
-    <div class="modal-footer">
-      <button class="btn" onclick="closeModal()">Fermer</button>
-      <button class="btn" onclick="closeModal();openObjectForm(${id})">Modifier</button>
-      <button class="btn btn-danger btn-sm" onclick="confirmDeleteObjectFull(${id})">Supprimer tout</button>
-    </div>
-  `, `Objet : ${obj.name}`);
+  const tagsHtml = obj.tags
+    ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">' +
+        obj.tags.split(',').map(function(t){ return '<span style="font-size:10px;padding:2px 7px;background:var(--bg3);border-radius:20px;color:var(--text2)">#' + t.trim() + '</span>'; }).join('') +
+      '</div>'
+    : '';
+
+  openModal(
+    photoHtml +
+    '<div style="margin-bottom:16px">' +
+      '<div style="font-size:16px;font-weight:500;margin-bottom:4px">' + obj.name + '</div>' +
+      (obj.theme_name ? '<span style="font-size:12px;color:var(--text3)">' + obj.theme_name + '</span>' : '') +
+      (obj.description ? '<p style="font-size:13px;color:var(--text2);margin-top:8px">' + obj.description + '</p>' : '') +
+      tagsHtml +
+      (obj.source_url ? '<div style="margin-top:10px">' + renderSourceBadge(obj.source_url) + '</div>' : '') +
+    '</div>' +
+    printsHtml +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+      '<span class="form-label">' + obj.files.length + ' fichier' + (obj.files.length!=1?'s':'') + ' · ' + formatFileSize(totalSize) + '</span>' +
+      '<button class="btn btn-sm btn-primary" onclick="openUploadForm(' + id + ')">+ Ajouter un fichier</button>' +
+    '</div>' +
+    filesHtml +
+    (obj.source_url ? '<div style="margin-bottom:12px">' + renderSourceBadge(obj.source_url) + '</div>' : '') +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Fermer</button>' +
+      '<button class="btn" onclick="openQRCode(' + id + ',\'' + obj.name.replace(/'/g,"\\'") + '\')">QR Code</button>' +
+      '<button class="btn" onclick="closeModal();openObjectForm(' + id + ')">Modifier</button>' +
+      '<button class="btn btn-danger btn-sm" onclick="confirmDeleteObjectFull(' + id + ')">Supprimer tout</button>' +
+    '</div>',
+    'Objet : ' + obj.name
+  );
 }
-
 function openPartNameEdit(objectId, fileId, currentName) {
   openModal(`
     <div class="form-group">
@@ -581,6 +651,10 @@ function openUploadForm(prefillObjectId=null) {
         <label class="form-label">URL source</label>
         <input id="lib-url" type="url" placeholder="https://…">
       </div>
+      <div class="form-group">
+        <label class="form-label">Version</label>
+        <input id="lib-version" placeholder="ex: v1.0, v2.1, rev3">
+      </div>
       <div class="form-group full">
         <label class="form-label">Tags</label>
         <input id="lib-tags" placeholder="tag1, tag2…">
@@ -637,6 +711,7 @@ async function uploadFile() {
   fd.append('tags',        document.getElementById('lib-tags').value);
   fd.append('description', document.getElementById('lib-desc').value);
   fd.append('source_url',  document.getElementById('lib-url').value);
+  fd.append('version',     document.getElementById('lib-version')?.value || '');
   const uploadMatSpans = document.querySelectorAll('#upload-materials-picker [data-mat]');
   const uploadMats = Array.from(uploadMatSpans).filter(function(s){ return s.dataset.selected==='1'; }).map(function(s){ return s.dataset.mat; });
   if (uploadMats.length) fd.append('recommended_materials', uploadMats.join(','));
@@ -1074,4 +1149,208 @@ async function exportObjectPDF(id) {
 
   doc.save("printflow_objet_" + (obj.name||id).replace(/[^a-z0-9]/gi,"_") + ".pdf");
   toast("PDF exporté", "success");
+}
+
+// ── Source URL — détection de plateforme ────────────────────────────────────
+function detectPlatform(url) {
+  if (!url) return null;
+  const u = url.toLowerCase();
+  if (u.includes('thingiverse.com'))  return { name: 'Thingiverse',  color: '#248BFB', icon: '🔵' };
+  if (u.includes('printables.com'))   return { name: 'Printables',   color: '#FA6831', icon: '🟠' };
+  if (u.includes('makerworld.com'))   return { name: 'MakerWorld',   color: '#1DB954', icon: '🟢' };
+  if (u.includes('cults3d.com'))      return { name: 'Cults3D',      color: '#A855F7', icon: '🟣' };
+  if (u.includes('myminifactory.com'))return { name: 'MyMiniFactory', color: '#E91E63', icon: '🩷' };
+  if (u.includes('thangs.com'))       return { name: 'Thangs',       color: '#FF6B35', icon: '🟠' };
+  if (u.includes('youmagine.com'))    return { name: 'YouMagine',    color: '#00BCD4', icon: '🔵' };
+  return { name: 'Source', color: 'var(--accent)', icon: '🔗' };
+}
+
+function renderSourceBadge(url) {
+  if (!url) return '';
+  const p = detectPlatform(url);
+  return '<a href="' + url + '" target="_blank" rel="noopener" ' +
+    'style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;' +
+    'font-size:12px;font-weight:500;text-decoration:none;color:#fff;background:' + p.color + ';' +
+    'transition:opacity 0.15s" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">' +
+    p.icon + ' ' + p.name +
+    '<svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">' +
+    '<path d="M5 2H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V7M7 1h4m0 0v4m0-4L5 7"/></svg>' +
+  '</a>';
+}
+
+// ── QR Code ──────────────────────────────────────────────────────────────────
+function openQRCode(objectId, objectName) {
+  const url = window.location.origin + '/#library/' + objectId;
+
+  openModal(
+    '<div style="text-align:center;padding:8px 0">' +
+      '<div id="qr-container" style="display:inline-block;padding:16px;background:#fff;' +
+        'border-radius:var(--radius);box-shadow:0 2px 8px rgba(0,0,0,0.12);margin-bottom:16px"></div>' +
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:16px;word-break:break-all">' + url + '</div>' +
+      '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">' +
+        '<button class="btn" onclick="downloadQRCode(\'' + objectName.replace(/'/g,"\\'") + '\')" >↓ PNG</button>' +
+        '<button class="btn" onclick="printQRCode()">🖨 Imprimer</button>' +
+        '<button class="btn btn-sm" onclick="copyToClipboard(\'' + url + '\')" style="font-size:11px">📋 Copier l\'URL</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="modal-footer"><button class="btn" onclick="closeModal()">Fermer</button></div>',
+    'QR Code — ' + objectName
+  );
+
+  // Générer le QR code après ouverture du modal
+  setTimeout(function() {
+    const container = document.getElementById('qr-container');
+    if (!container) return;
+    if (typeof QRCode === 'undefined') {
+      container.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:20px">Librairie QRCode non chargée.<br>Vérifiez la connexion.</div>';
+      return;
+    }
+    new QRCode(container, {
+      text:           url,
+      width:          200,
+      height:         200,
+      colorDark:      '#000000',
+      colorLight:     '#ffffff',
+      correctLevel:   QRCode.CorrectLevel.M,
+    });
+  }, 100);
+}
+
+function downloadQRCode(objectName) {
+  const container = document.getElementById('qr-container');
+  if (!container) return;
+  const canvas = container.querySelector('canvas');
+  const img    = container.querySelector('img');
+
+  if (canvas) {
+    const a = document.createElement('a');
+    a.download = 'qrcode_' + objectName.replace(/[^a-z0-9]/gi, '_') + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  } else if (img) {
+    const a = document.createElement('a');
+    a.download = 'qrcode_' + objectName.replace(/[^a-z0-9]/gi, '_') + '.png';
+    a.href = img.src;
+    a.click();
+  }
+}
+
+function printQRCode() {
+  const container = document.getElementById('qr-container');
+  if (!container) return;
+  const canvas = container.querySelector('canvas');
+  const src    = canvas ? canvas.toDataURL('image/png') : (container.querySelector('img')?.src || '');
+  if (!src) return;
+  const win = window.open('', '_blank');
+  win.document.write(
+    '<html><body style="text-align:center;font-family:sans-serif;padding:20px">' +
+    '<img src="' + src + '" style="width:200px;height:200px"><br>' +
+    '<div style="margin-top:12px;font-size:14px">' + document.title + '</div>' +
+    '<script>window.onload=function(){window.print();window.close()}<\/script>' +
+    '</body></html>'
+  );
+  win.document.close();
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(function() {
+    toast('URL copiée ✓', 'success');
+  }).catch(function() {
+    toast('Impossible de copier', 'error');
+  });
+}
+
+// ── Gestion des versions ─────────────────────────────────────────────────────
+function toggleVersionHistory(fileId) {
+  const el = document.getElementById('vh-' + fileId);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  // Charger l'historique
+  API.get('/library/files/' + fileId + '/versions').then(function(versions) {
+    const older = versions.filter(function(v) { return !v.is_latest; });
+    if (!older.length) { el.innerHTML = '<span style="font-size:11px;color:var(--text3)">Aucune version précédente</span>'; }
+    else {
+      el.innerHTML = older.map(function(v) {
+        return '<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3);' +
+          'padding:3px 0;border-bottom:0.5px solid var(--border)">' +
+          (v.version ? '<span style="font-size:10px;padding:1px 5px;border-radius:10px;background:var(--bg3);color:var(--text2)">' + v.version + '</span>' : '') +
+          '<span>' + fmtDate(v.created_at) + '</span>' +
+          '<span style="flex:1;font-style:italic">' + (v.changelog || '—') + '</span>' +
+          '<span>' + formatFileSize(v.file_size) + '</span>' +
+          '<a href="/api/library/files/' + v.id + '/download" class="btn btn-sm" style="font-size:10px;text-decoration:none;padding:2px 6px">↓</a>' +
+        '</div>';
+      }).join('');
+    }
+    el.style.display = 'block';
+  }).catch(function() {
+    el.innerHTML = '<span style="font-size:11px;color:var(--danger)">Erreur de chargement</span>';
+    el.style.display = 'block';
+  });
+}
+
+function openNewVersionForm(fileId, fileName, objectId) {
+  openModal(
+    '<div style="background:var(--bg3);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:13px">' +
+      '<div style="font-weight:500;margin-bottom:2px">' + fileName + '</div>' +
+      '<div style="font-size:11px;color:var(--text3)">Le fichier actuel sera conservé comme version précédente</div>' +
+    '</div>' +
+    '<div class="form-grid">' +
+      '<div class="form-group">' +
+        '<label class="form-label">Numéro de version *</label>' +
+        '<input id="nv-version" placeholder="ex: v2.0, v1.1, rev4">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Fichier *</label>' +
+        '<input id="nv-file" type="file" accept=".stl,.3mf,.obj,.gcode,.step,.stp,.other">' +
+      '</div>' +
+      '<div class="form-group full">' +
+        '<label class="form-label">Changelog — qu\'est-ce qui a changé ?</label>' +
+        '<textarea id="nv-changelog" style="min-height:70px" placeholder="ex: Renfort des attaches, tolérances +0.2mm, correction warping…"></textarea>' +
+      '</div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="uploadNewVersion(' + fileId + ',' + objectId + ')">Publier la nouvelle version</button>' +
+    '</div>',
+    'Nouvelle version — ' + fileName
+  );
+}
+
+async function uploadNewVersion(parentFileId, objectId) {
+  const version   = document.getElementById('nv-version')?.value?.trim();
+  const changelog = document.getElementById('nv-changelog')?.value?.trim();
+  const fileInput = document.getElementById('nv-file');
+
+  if (!version)              return toast('Le numéro de version est requis', 'error');
+  if (!fileInput?.files?.length) return toast('Sélectionnez un fichier', 'error');
+
+  const file = fileInput.files[0];
+  if (file.size > 300 * 1024 * 1024) return toast('Fichier trop volumineux (max 300 Mo)', 'error');
+
+  // Récupérer les infos de l'ancien fichier pour les hériter
+  let parentInfo = {};
+  try { parentInfo = await API.get('/library/files/' + parentFileId); } catch(_) {}
+
+  const fd = new FormData();
+  fd.append('file',           file);
+  fd.append('name',           parentInfo.name || file.name.replace(/\.[^.]+$/, ''));
+  fd.append('object_id',      String(objectId));
+  fd.append('part_name',      parentInfo.part_name || '');
+  fd.append('description',    parentInfo.description || '');
+  fd.append('tags',           parentInfo.tags || '');
+  fd.append('recommended_materials', parentInfo.recommended_materials || '');
+  fd.append('version',        version);
+  fd.append('changelog',      changelog || '');
+  fd.append('parent_file_id', String(parentFileId));
+
+  try {
+    toast('Upload en cours…');
+    const resp = await fetch('/api/library/files', { method: 'POST', body: fd });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || 'Erreur upload');
+    toast('Version ' + version + ' publiée ✓', 'success');
+    closeModal();
+    // Rouvrir la fiche objet
+    if (objectId) openObjectDetail(objectId);
+  } catch(e) { toast(e.message, 'error'); }
 }

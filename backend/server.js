@@ -18,6 +18,13 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Static frontend (avant auth — les assets ne nécessitent pas d'auth)
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+// Favicon SVG
+app.get('/favicon.svg', (req, res) => {
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, '../frontend/favicon.svg'));
+});
+
 // Routes documentation API
 app.get('/api-docs', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/api-docs.html'));
@@ -49,6 +56,12 @@ app.use('/api/spoolman',    require('./routes/spoolman'));
 app.use('/api/projects',    require('./routes/projects'));
 app.use('/api/weighings',   require('./routes/weighings'));
 app.use('/api/library',     require('./routes/library'));
+
+// Consommables imprimantes
+app.use('/api/consumables', require('./routes/consumables'));
+
+// Rapport hebdomadaire
+app.use('/api/report', require('./routes/report'));
 
 // TigerTag Scale webhook
 const tigertagRouter = require('express').Router();
@@ -105,3 +118,9 @@ app.listen(PORT, () => {
   }, 3000);
   backupService.startBackup().catch(e => console.warn('[Backup] Erreur démarrage:', e.message));
 });
+
+// ── Démarrer le scheduler du rapport hebdomadaire ─────────────────────────
+try {
+  const { startScheduler } = require('./scheduler');
+  startScheduler().catch(function(e) { console.warn('[Scheduler]', e.message); });
+} catch(e) { console.warn('[Scheduler] Non disponible :', e.message); }

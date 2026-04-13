@@ -41,18 +41,70 @@ router.get('/:id/prints', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/printers/:id/reliability — courbe de fiabilité par période
+router.get('/:id/reliability', async (req, res) => {
+  try {
+    const months = parseInt(req.query.months) || 12;
+    const granularity = req.query.granularity || 'month'; // 'week' ou 'month'
+
+    const format = granularity === 'week' ? '%Y-%u' : '%Y-%m';
+    const label  = granularity === 'week' ? '%Y S%u'  : '%Y-%m';
+
+    const [rows] = await db.query(`
+      SELECT
+        DATE_FORMAT(created_at, ?) AS period,
+        DATE_FORMAT(created_at, '%Y-%m-%d') AS first_date,
+        COUNT(*)                             AS total,
+        SUM(status = 'done')                 AS success,
+        SUM(status = 'failed')               AS failed,
+        SUM(status = 'cancelled')            AS cancelled,
+        ROUND(SUM(status='done') / COUNT(*) * 100, 1) AS rate,
+        ROUND(SUM(actual_duration) / 60, 1)  AS hours
+      FROM prints
+      WHERE printer_id = ?
+        AND created_at >= DATE_SUB(NOW(), INTERVAL ? MONTH)
+        AND status IN ('done','failed','cancelled')
+      GROUP BY period
+      ORDER BY period ASC
+    `, [format, req.params.id, months]);
+
+    // Moyenne globale sur la période
+    const [[global]] = await db.query(`
+      SELECT
+        COUNT(*)                                        AS total,
+        SUM(status='done')                              AS success,
+        ROUND(SUM(status='done') / COUNT(*) * 100, 1)  AS avg_rate
+      FROM prints
+      WHERE printer_id = ?
+        AND created_at >= DATE_SUB(NOW(), INTERVAL ? MONTH)
+        AND status IN ('done','failed','cancelled')
+    `, [req.params.id, months]);
+
+    // Maintenance sur la même période (pour corrélation)
+    const [maintenance] = await db.query(`
+      SELECT performed_at, type, description
+      FROM maintenance
+      WHERE printer_id = ?
+        AND performed_at >= DATE_SUB(NOW(), INTERVAL ? MONTH)
+      ORDER BY performed_at ASC
+    `, [req.params.id, months]);
+
+    res.json({ periods: rows, global, maintenance });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST create printer
 router.post('/', async (req, res) => {
   try {
     const { name, model, ip_address, interface_type, interface_url, api_key,
             volume_x, volume_y, volume_z, nozzle_size, nozzle_count,
-            temp_nozzle_max, temp_bed_max, location, notes } = req.body;
+            temp_nozzle_max, temp_bed_max, location, notes, power_consumption, has_ams } = req.body;
     const [result] = await db.query(
       `INSERT INTO printers (name,model,ip_address,interface_type,interface_url,api_key,
-        volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,location,notes)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,location,notes,power_consumption,has_ams)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [name,model,ip_address,interface_type,interface_url,api_key,
-       volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,location,notes]
+       volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,location,notes,power_consumption||null,has_ams||0]
     );
     const [rows] = await db.query('SELECT * FROM printers WHERE id = ?', [result.insertId]);
     await logAction('printer', result.insertId, 'create', 'Imprimante créée : ' + rows[0].name);
@@ -65,14 +117,14 @@ router.put('/:id', async (req, res) => {
   try {
     const { name, model, ip_address, interface_type, interface_url, api_key,
             volume_x, volume_y, volume_z, nozzle_size, nozzle_count,
-            temp_nozzle_max, temp_bed_max, location, notes, status } = req.body;
+            temp_nozzle_max, temp_bed_max, location, notes, status, power_consumption, has_ams } = req.body;
     await db.query(
       `UPDATE printers SET name=?,model=?,ip_address=?,interface_type=?,interface_url=?,api_key=?,
         volume_x=?,volume_y=?,volume_z=?,nozzle_size=?,nozzle_count=?,temp_nozzle_max=?,temp_bed_max=?,
-        location=?,notes=?,status=? WHERE id=?`,
+        location=?,notes=?,status=?,power_consumption=?,has_ams=? WHERE id=?`,
       [name,model,ip_address,interface_type,interface_url,api_key,
        volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,
-       location,notes,status,req.params.id]
+       location,notes,status,power_consumption||null,has_ams||0,req.params.id]
     );
     const [rows] = await db.query('SELECT * FROM printers WHERE id = ?', [req.params.id]);
     await logAction('printer', req.params.id, 'update', 'Imprimante modifiée : ' + rows[0].name);

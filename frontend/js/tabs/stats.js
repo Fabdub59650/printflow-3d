@@ -6,6 +6,7 @@ async function renderStats() {
       <button class="filter-btn"        data-view="filaments"   onclick="switchStatsView('filaments',this)">Filaments</button>
       <button class="filter-btn"        data-view="prints"      onclick="switchStatsView('prints',this)">Impressions</button>
       <button class="filter-btn"        data-view="consumption" onclick="switchStatsView('consumption',this)">Consommation</button>
+      <button class="filter-btn"        data-view="costs"       onclick="switchStatsView('costs',this)">Coûts</button>
     </div>`;
   document.getElementById('content').innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 
@@ -29,6 +30,7 @@ function switchStatsView(view, btn) {
   if (view === 'filaments')   renderStatsFilaments();
   if (view === 'prints')      renderStatsPrints();
   if (view === 'consumption') renderStatsConsumption();
+  if (view === 'costs')       renderStatsCosts();
 }
 
 async function renderStatsGlobal() {
@@ -508,4 +510,133 @@ async function renderStatsPrints() {
       }
     } catch(_) {}
   }
+}
+
+// ── Stats coûts filament + électricité ─────────────────────────────────────
+async function renderStatsCosts() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
+
+  // Sélecteur de période
+  const existingDays = document.getElementById('costs-days-select');
+  const days = existingDays ? existingDays.value : '30';
+
+  let data;
+  try { data = await API.get('/stats/costs?days=' + days); }
+  catch(e) { content.innerHTML = '<div style="color:var(--danger)">' + e.message + '</div>'; return; }
+
+  const t = data.totals || {};
+  const fmt = function(v) { return (Math.round(v * 100) / 100).toFixed(2); };
+
+  // Prix kWh configurable
+  let html = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">' +
+    '<select id="costs-days-select" onchange="renderStatsCosts()" style="font-size:12px">' +
+      '<option value="7"'  + (days==='7'  ?' selected':'') + '>7 jours</option>' +
+      '<option value="30"' + (days==='30' ?' selected':'') + '>30 jours</option>' +
+      '<option value="90"' + (days==='90' ?' selected':'') + '>90 jours</option>' +
+      '<option value="365"'+ (days==='365'?' selected':'') + '>12 mois</option>' +
+    '</select>' +
+    '<span style="font-size:12px;color:var(--text3)">Prix kWh : <strong>' + data.kwh_price + ' €</strong></span>' +
+    '<button class="btn btn-sm" onclick="openKwhSettings()">⚙ Modifier</button>' +
+  '</div>';
+
+  // Métriques globales
+  html += '<div class="metrics-grid" style="margin-bottom:16px">' +
+    '<div class="metric-card"><div class="metric-label">Coût filament</div>' +
+      '<div class="metric-value" style="font-size:20px;color:var(--accent)">' + fmt(t.filament) + ' €</div></div>' +
+    '<div class="metric-card"><div class="metric-label">Coût électricité</div>' +
+      '<div class="metric-value" style="font-size:20px;color:#f59e0b">' + fmt(t.electricity) + ' €</div></div>' +
+    '<div class="metric-card"><div class="metric-label">Coût total</div>' +
+      '<div class="metric-value" style="font-size:20px;font-weight:600">' + fmt(t.total) + ' €</div></div>' +
+    '<div class="metric-card"><div class="metric-label">Filament utilisé</div>' +
+      '<div class="metric-value" style="font-size:20px">' + Math.round(t.filament_g) + ' g</div></div>' +
+  '</div>';
+
+  // Coûts par matière
+  const matEntries = Object.entries(data.byMaterial || {});
+  if (matEntries.length) {
+    html += '<div class="grid-2" style="margin-bottom:16px">' +
+      '<div class="card"><div class="card-header"><span class="card-title">Coût par matière</span></div>' +
+      '<table><thead><tr><th>Matière</th><th>Impressions</th><th>Filament</th><th>Électricité</th><th>Total</th></tr></thead><tbody>' +
+      matEntries.sort(function(a,b){ return (b[1].filament+b[1].electricity)-(a[1].filament+a[1].electricity); })
+        .map(function(e) {
+          const mat = e[0], d = e[1];
+          const tot = d.filament + d.electricity;
+          return '<tr>' +
+            '<td style="font-weight:500">' + mat + '</td>' +
+            '<td style="font-size:12px">' + d.count + '</td>' +
+            '<td style="font-size:12px;color:var(--accent)">' + fmt(d.filament) + ' €</td>' +
+            '<td style="font-size:12px;color:#f59e0b">' + fmt(d.electricity) + ' €</td>' +
+            '<td style="font-size:12px;font-weight:500">' + fmt(tot) + ' €</td>' +
+          '</tr>';
+        }).join('') +
+      '</tbody></table></div>';
+
+    // Note si imprimantes sans consommation configurée
+    const noPower = (data.prints || []).filter(function(p){ return !p.power_consumption; });
+    html += '<div class="card"><div class="card-header"><span class="card-title">Informations</span></div>' +
+      '<p style="font-size:13px;color:var(--text2);margin-bottom:10px">Le coût électricité est calculé sur la durée réelle de l\'impression.</p>' +
+      (noPower.length > 0
+        ? '<div style="background:var(--warning-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--warning)">' +
+          '⚠ ' + noPower.length + ' impression(s) sans consommation électrique configurée sur l\'imprimante.' +
+          ' Configurez la puissance (W) dans la fiche imprimante pour un calcul précis.</div>'
+        : '<div style="font-size:12px;color:var(--success)">✓ Toutes les imprimantes ont une consommation configurée.</div>') +
+      '</div></div>';
+  }
+
+  // Tableau des impressions avec coûts
+  if (data.prints && data.prints.length) {
+    html += '<div class="card"><div class="card-header"><span class="card-title">Détail par impression</span></div>' +
+      '<div style="overflow-x:auto"><table><thead><tr>' +
+        '<th>Impression</th><th>Date</th><th>Filament</th><th>Durée</th><th>Coût fil.</th><th>Coût élec.</th><th>Total</th>' +
+      '</tr></thead><tbody>' +
+      data.prints.map(function(p) {
+        const tot = (parseFloat(p.cost_filament)||0) + (parseFloat(p.cost_electricity)||0);
+        const dur = p.actual_duration ? Math.floor(p.actual_duration/60)+'h'+String(p.actual_duration%60).padStart(2,'0') : '—';
+        return '<tr>' +
+          '<td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + p.name + '</td>' +
+          '<td style="font-size:11px;color:var(--text3);white-space:nowrap">' + fmtDate(p.created_at) + '</td>' +
+          '<td style="font-size:12px;color:var(--text3)">' + (p.filament_name||'—') + '</td>' +
+          '<td style="font-size:12px">' + dur + '</td>' +
+          '<td style="font-size:12px;color:var(--accent)">' + fmt(parseFloat(p.cost_filament)||0) + ' €</td>' +
+          '<td style="font-size:12px;color:#f59e0b">' + fmt(parseFloat(p.cost_electricity)||0) + ' €</td>' +
+          '<td style="font-size:12px;font-weight:500">' + fmt(tot) + ' €</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table></div></div>';
+  } else {
+    html += '<div class="empty-state"><p>Aucune impression terminée sur cette période avec filament et imprimante renseignés.</p></div>';
+  }
+
+  content.innerHTML = html;
+}
+
+function openKwhSettings() {
+  openModal(
+    '<div class="form-group">' +
+      '<label class="form-label">Prix du kWh (€)</label>' +
+      '<input id="kwh-input" type="number" step="0.01" min="0" placeholder="0.20" style="width:200px">' +
+    '</div>' +
+    '<p style="font-size:12px;color:var(--text3);margin-top:8px">Ce tarif est utilisé pour calculer le coût électrique de toutes les impressions.</p>' +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="saveKwhPrice()">Enregistrer</button>' +
+    '</div>',
+    'Prix du kWh'
+  );
+  API.get('/settings').then(function(s) {
+    const el = document.getElementById('kwh-input');
+    if (el) el.value = s.electricity_price_kwh || '0.20';
+  });
+}
+
+async function saveKwhPrice() {
+  const val = document.getElementById('kwh-input')?.value;
+  if (!val || isNaN(parseFloat(val))) return toast('Valeur invalide', 'error');
+  try {
+    await API.put('/settings', { electricity_price_kwh: val });
+    toast('Prix kWh enregistré : ' + val + ' €', 'success');
+    closeModal();
+    renderStatsCosts();
+  } catch(e) { toast(e.message, 'error'); }
 }

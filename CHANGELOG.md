@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.9.0] — 2026-04-11
+
+### Ajouté
+- **Photo impression** — upload, miniature dans tableau, suppression, export PDF avec photo
+- **Graphique activité dashboard** — grille 12 mois type GitHub, tooltip, légende intensité
+- **Calcul coût impression** — filament + électricité, onglet Coûts dans Statistiques, export PDF
+- **Consommables imprimantes** — suivi huile/lubrifiant/HEPA/courroies etc. par compteur d'heures auto, alerte dashboard à 80%, bouton ✓ Remplacé, 8 modèles prédéfinis
+- Champ puissance (W) dans fiche imprimante
+- Prix kWh configurable dans l'onglet Coûts
+- Chemin de stockage photos impressions configurable dans Paramètres
+- Routes API : photo impression, stats/activity, stats/costs, consumables (CRUD + reset + alerts + templates)
+
+### Corrigé
+- jsPDF UMD exposé sous window.jspdf.jsPDF et non window.jsPDF
+
+---
+
+[OLD_1.9.0] — 2026-04-11
+
+### Ajouté
+- **Photo impression** — upload d'une photo du résultat depuis la fiche détail, miniature dans le tableau, suppression possible. Stockage dans `/opt/printflow/prints/`
+- **Graphique activité dashboard** — grille type GitHub sur 12 mois, colorée selon l'intensité d'impressions (0 à 6+ par jour), tooltip au survol avec la date et le nombre
+- **Calcul coût impression** — coût filament (g × prix/kg) + coût électricité (W × durée × prix kWh) affichés dans la fiche détail et dans un nouvel onglet "Coûts" des Statistiques
+- **Export PDF fiche impression** — photo + paramètres + coûts + notes en PDF A4
+- **Consommation électrique imprimante** — champ "Watts" dans la fiche imprimante, utilisé pour le calcul du coût
+- **Prix kWh configurable** — dans l'onglet Coûts des Statistiques, bouton ⚙ Modifier
+- Onglet "Coûts" dans les Statistiques — total filament, électricité et coût global par période (7/30/90/365 jours), détail par matière et par impression
+- Routes API : `POST/GET/DELETE /api/prints/:id/photo`, `GET /api/stats/activity`, `GET /api/stats/costs`
+- Colonne SQL `photo_path` dans `prints`, `power_consumption` dans `printers`, clé `electricity_price_kwh` dans `settings`
+
+### Corrigé
+- `markMaintenanceDone` dupliqué dans dashboard.js après ajout du graphique activité
+
+---
+
+
 ## [1.8.0] — 2026-04-11
 
 ### Ajouté

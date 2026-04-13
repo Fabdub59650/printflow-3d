@@ -66,7 +66,56 @@ function applyTheme(name) {
   if (!el) { el = document.createElement('style'); el.id = 'theme-vars'; document.head.appendChild(el); }
   el.textContent =
     ':root { --accent:' + t.accent + '; --accent-bg:' + t.accentBg + '; --info:' + t.accent + '; --info-bg:' + t.accentBg + ' }' +
-    '@media (prefers-color-scheme:dark) { :root { --accent:' + t.accent + '; --accent-bg:' + t.accentDark + '; --info:' + t.accent + '; --info-bg:' + t.accentDarkBg + ' } }';
+    ':root[data-color-scheme="dark"] { --accent:' + t.accent + '; --accent-bg:' + t.accentDark + '; --info:' + t.accent + '; --info-bg:' + t.accentDarkBg + ' }' +
+    '@media (prefers-color-scheme:dark) { :root:not([data-color-scheme="light"]) { --accent:' + t.accent + '; --accent-bg:' + t.accentDark + '; --info:' + t.accent + '; --info-bg:' + t.accentDarkBg + ' } }';
+}
+
+// ── Gestion du mode sombre automatique ────────────────────────────────────
+var _colorModeInterval = null;
+
+function applyColorMode(mode, darkFrom, darkTo) {
+  // mode: 'auto-system' | 'auto-time' | 'dark' | 'light' | null (manuel)
+  if (_colorModeInterval) { clearInterval(_colorModeInterval); _colorModeInterval = null; }
+  if (window._colorModeQuery) {
+    try { window._colorModeQuery.removeEventListener('change', window._colorModeHandler); } catch(_) {}
+  }
+
+  if (mode === 'auto-system') {
+    // Suivre le thème système
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = function(e) {
+      document.documentElement.setAttribute('data-color-scheme', e.matches ? 'dark' : 'light');
+    };
+    mq.addEventListener('change', handler);
+    window._colorModeQuery   = mq;
+    window._colorModeHandler = handler;
+    document.documentElement.setAttribute('data-color-scheme', mq.matches ? 'dark' : 'light');
+
+  } else if (mode === 'auto-time') {
+    // Sombre entre darkFrom et darkTo (heures entières)
+    const checkTime = function() {
+      const h = new Date().getHours();
+      const from = parseInt(darkFrom) || 20;
+      const to   = parseInt(darkTo)   || 7;
+      let isDark;
+      if (from > to) {
+        isDark = h >= from || h < to;   // ex: 20h-7h (passe minuit)
+      } else {
+        isDark = h >= from && h < to;   // ex: 1h-6h
+      }
+      document.documentElement.setAttribute('data-color-scheme', isDark ? 'dark' : 'light');
+    };
+    checkTime();
+    _colorModeInterval = setInterval(checkTime, 60000); // vérifier chaque minute
+
+  } else if (mode === 'dark') {
+    document.documentElement.setAttribute('data-color-scheme', 'dark');
+  } else if (mode === 'light') {
+    document.documentElement.setAttribute('data-color-scheme', 'light');
+  } else {
+    // Manuel — laisser le CSS @media gérer
+    document.documentElement.removeAttribute('data-color-scheme');
+  }
 }
 
 // Valeurs par défaut — évite tout affichage parasite avant le chargement des settings
@@ -75,12 +124,15 @@ window._showPrices             = false;
 window._showLocations          = false;
 window._stockAlertEnabled      = false;
 window._maintenanceAlertEnabled = false;
+window._projectsEnabled        = true;  // activé par défaut
 
 // Charger les settings puis démarrer l'interface
 (async () => {
   try {
     const s = await fetch('/api/settings').then(r => r.json());
     if (s.theme) applyTheme(s.theme);
+    // Appliquer le mode sombre
+    applyColorMode(s.color_mode || null, s.dark_from || '20', s.dark_to || '7');
     // Appliquer le nom de l'application
     if (s.app_name) {
       const logoEl = document.querySelector('.logo-name');
@@ -92,13 +144,33 @@ window._maintenanceAlertEnabled = false;
     window._showLocations          = s.show_locations      !== 'false';
     window._stockAlertEnabled      = s.stock_alert_enabled === 'true';
     window._maintenanceAlertEnabled = s.maintenance_alert_enabled === 'true';
+    window._projectsEnabled        = s.projects_enabled    !== 'false';
+
+    // Appliquer la visibilité de l'onglet Projets
+    const navProjects = document.getElementById('nav-projects');
+    if (navProjects) navProjects.style.display = window._projectsEnabled ? '' : 'none';
   } catch(_) {}
 
   // Auth optionnelle — ne bloque jamais le démarrage
   try { checkAuth(); } catch(_) {}
 
-  // Démarrer sur le dashboard APRÈS que les settings sont chargés
-  switchTab('dashboard');
+  // Démarrer sur le dashboard ou sur la cible du hash si présent
+  const hash = window.location.hash; // ex: #library/42
+  if (hash && hash.startsWith('#library/')) {
+    const objectId = parseInt(hash.replace('#library/', ''));
+    if (objectId) {
+      switchTab('library');
+      // Ouvrir la fiche objet après le rendu de l'onglet
+      setTimeout(function() {
+        if (typeof openObjectDetail === 'function') openObjectDetail(objectId);
+      }, 600);
+    } else {
+      switchTab('dashboard');
+    }
+  } else {
+    switchTab('dashboard');
+  }
+
   checkSpoolmanStatus();
   setInterval(checkSpoolmanStatus, 30000);
 })();
