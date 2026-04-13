@@ -377,13 +377,6 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 -- Abonnements push
-CREATE TABLE IF NOT EXISTS push_subscriptions (
-  id         INT AUTO_INCREMENT PRIMARY KEY,
-  endpoint   VARCHAR(500) NOT NULL UNIQUE,
-  p256dh     VARCHAR(200) NOT NULL,
-  auth       VARCHAR(100) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 -- Clés VAPID pour les notifications push
 INSERT IGNORE INTO settings (key_name, value) VALUES
@@ -395,3 +388,203 @@ INSERT IGNORE INTO settings (key_name, value) VALUES
 INSERT IGNORE INTO settings (key_name, value) VALUES
   ('maintenance_alert_enabled', 'true'),
   ('maintenance_alert_days',    '30');
+
+-- ── v1.9.0 — Photo impression, coût électricité ───────────────────────────
+
+-- Photo impression
+ALTER TABLE prints ADD COLUMN IF NOT EXISTS photo_path VARCHAR(500) DEFAULT NULL COMMENT 'Photo du résultat d impression';
+
+-- Coût électricité imprimante (W)
+ALTER TABLE printers ADD COLUMN IF NOT EXISTS power_consumption INT DEFAULT NULL COMMENT 'Consommation électrique en Watts';
+
+-- Prix kWh global (dans settings)
+INSERT IGNORE INTO settings (key_name, value) VALUES ('electricity_price_kwh', '0.20');
+INSERT IGNORE INTO settings (key_name, value) VALUES ('prints_photo_path', '/opt/printflow/prints');
+
+-- ── v1.10.0 — Consommables imprimantes ────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS consumables (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  printer_id      INT NOT NULL,
+  name            VARCHAR(100) NOT NULL COMMENT 'ex: Huile rails X/Y',
+  interval_hours  INT NOT NULL DEFAULT 200 COMMENT 'Intervalle de remplacement en heures',
+  reset_at        TIMESTAMP NULL DEFAULT NULL COMMENT 'Date de la dernière réinitialisation',
+  notes           TEXT,
+  created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (printer_id) REFERENCES printers(id) ON DELETE CASCADE
+);
+
+-- Consommables prédéfinis par défaut (référence)
+CREATE TABLE IF NOT EXISTS consumable_templates (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  name           VARCHAR(100) NOT NULL,
+  default_hours  INT NOT NULL,
+  description    VARCHAR(255)
+);
+
+INSERT IGNORE INTO consumable_templates (id, name, default_hours, description) VALUES
+  (1, 'Huile rails X/Y',       200, 'Lubrification des rails de guidage'),
+  (2, 'Lubrifiant vis mère Z', 300, 'Graissage de la vis trapézoïdale Z'),
+  (3, 'Filtre HEPA',           500, 'Remplacement du filtre à particules'),
+  (4, 'Filtre charbon actif',  400, 'Remplacement du filtre aux odeurs'),
+  (5, 'Nettoyage buse',        100, 'Nettoyage ou remplacement de la buse'),
+  (6, 'Nettoyage plateau',      50, 'Nettoyage en profondeur du plateau'),
+  (7, 'Vérification courroies',500, 'Tension et usure des courroies'),
+  (8, 'Calibration XYZ',       200, 'Recalibration complète des axes');
+
+-- ── v1.10.0 — Lien impression ↔ objet bibliothèque ───────────────────────
+ALTER TABLE prints ADD COLUMN IF NOT EXISTS
+  library_object_id INT DEFAULT NULL COMMENT 'Lien vers un objet de la bibliothèque';
+
+ALTER TABLE prints ADD COLUMN IF NOT EXISTS
+  library_file_id_v2 INT DEFAULT NULL COMMENT 'Fichier STL/3MF utilisé (depuis la bibliothèque)';
+
+-- FK si pas déjà présente
+SET @sql = IF(
+  NOT EXISTS(SELECT 1 FROM information_schema.KEY_COLUMN_USAGE
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='prints' AND CONSTRAINT_NAME='fk_prints_lib_object'),
+  'ALTER TABLE prints ADD CONSTRAINT fk_prints_lib_object FOREIGN KEY (library_object_id) REFERENCES library_objects(id) ON DELETE SET NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ── v1.10.0 — Multi-filaments par impression ──────────────────────────────
+CREATE TABLE IF NOT EXISTS print_filaments (
+  id                  INT AUTO_INCREMENT PRIMARY KEY,
+  print_id            INT NOT NULL,
+  filament_id         INT NOT NULL,
+  sort_order          INT DEFAULT 0 COMMENT 'Ordre d impression (1er, 2ème...)',
+  quantity_estimated  DECIMAL(8,2) DEFAULT NULL COMMENT 'Grammes prévus',
+  quantity_actual     DECIMAL(8,2) DEFAULT NULL COMMENT 'Grammes réellement utilisés',
+  notes               VARCHAR(200) DEFAULT NULL,
+  FOREIGN KEY (print_id)   REFERENCES prints(id)   ON DELETE CASCADE,
+  FOREIGN KEY (filament_id) REFERENCES filaments(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_print_filaments_print ON print_filaments(print_id);
+
+-- ── v1.10.0 — Paramètre activation projets ───────────────────────────────
+INSERT IGNORE INTO settings (key_name, value) VALUES ('projects_enabled', 'true');
+
+-- ── v1.10.0 — Notation des impressions ───────────────────────────────────
+ALTER TABLE prints ADD COLUMN IF NOT EXISTS
+  rating TINYINT DEFAULT NULL COMMENT 'Note de 1 à 5 étoiles';
+
+-- ── v1.10.0 — Versioning des fichiers bibliothèque ───────────────────────
+ALTER TABLE library_files
+  ADD COLUMN IF NOT EXISTS version        VARCHAR(20)  DEFAULT NULL  COMMENT 'ex: v1.0, v2.1',
+  ADD COLUMN IF NOT EXISTS changelog      TEXT         DEFAULT NULL  COMMENT 'Description des changements',
+  ADD COLUMN IF NOT EXISTS parent_file_id INT          DEFAULT NULL  COMMENT 'Fichier version précédente',
+  ADD COLUMN IF NOT EXISTS is_latest      TINYINT(1)   DEFAULT 1     COMMENT '1 = version courante';
+
+-- Mettre toutes les fichiers existants comme "latest" par défaut
+UPDATE library_files SET is_latest = 1 WHERE is_latest IS NULL;
+
+-- ── v1.10.0 — Rapport hebdomadaire SMTP ──────────────────────────────────
+INSERT IGNORE INTO settings (key_name, value) VALUES
+  ('report_enabled',  'false'),
+  ('report_email',    ''),
+  ('report_day',      '1'),
+  ('report_hour',     '8'),
+  ('smtp_host',       ''),
+  ('smtp_port',       '587'),
+  ('smtp_secure',     'false'),
+  ('smtp_user',       ''),
+  ('smtp_password',   ''),
+  ('smtp_from',       '');
+
+-- ── Nettoyage — suppression tables obsolètes ─────────────────────────────
+DROP TABLE IF EXISTS push_subscriptions;
+
+-- ── v1.10.0 — Thème automatique ──────────────────────────────────────────
+INSERT IGNORE INTO settings (key_name, value) VALUES
+  ('color_mode', ''),
+  ('dark_from',  '20'),
+  ('dark_to',    '7');
+
+-- ── v1.9.0 final — Améliorations ─────────────────────────────────────────
+-- 1. Nom par défaut PrintFlow-3D
+UPDATE settings SET value='PrintFlow-3D' WHERE key_name='app_name' AND value='PrintFlow';
+INSERT IGNORE INTO settings (key_name, value) VALUES ('app_name', 'PrintFlow-3D');
+
+-- 2. Toggle AMS imprimantes
+ALTER TABLE printers ADD COLUMN IF NOT EXISTS
+  has_ams TINYINT(1) DEFAULT 0 COMMENT 'Système multi-filaments AMS/MMU';
+
+-- ── v2.0.0 — Intégration Tapo P100 ───────────────────────────────────────
+ALTER TABLE printers
+  ADD COLUMN IF NOT EXISTS tapo_ip VARCHAR(45) DEFAULT NULL COMMENT 'IP de la prise Tapo P100';
+
+-- ── v2.0.0 — Credentials Tapo ────────────────────────────────────────────
+INSERT IGNORE INTO settings (key_name, value) VALUES
+  ('tapo_email',    ''),
+  ('tapo_password', '');   -- stocké chiffré AES-256
+
+-- ── v2.0.0 — Tapo MAC et état ────────────────────────────────────────────
+ALTER TABLE printers
+  ADD COLUMN IF NOT EXISTS tapo_mac   VARCHAR(20)  DEFAULT NULL COMMENT 'Adresse MAC de la prise Tapo',
+  ADD COLUMN IF NOT EXISTS tapo_state TINYINT(1)   DEFAULT 0   COMMENT 'Dernier état connu 0=off 1=on';
+
+-- ── v2.0.0 — Tapo enabled toggle ─────────────────────────────────────────
+INSERT IGNORE INTO settings (key_name, value) VALUES ('tapo_enabled', 'false');
+
+-- ── v2.1.0 — Devis client ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS quotes (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  client_name     VARCHAR(255) NOT NULL,
+  client_email    VARCHAR(255) DEFAULT NULL,
+  description     TEXT,
+  filament_cost   DECIMAL(8,2) DEFAULT 0   COMMENT 'Coût matière calculé',
+  electricity_cost DECIMAL(8,2) DEFAULT 0  COMMENT 'Coût électricité calculé',
+  margin_pct      DECIMAL(5,2) DEFAULT 20  COMMENT 'Marge en %',
+  total_ht        DECIMAL(8,2) DEFAULT 0,
+  notes           TEXT,
+  status          ENUM('draft','sent','accepted','refused') DEFAULT 'draft',
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- Paramètres d'impression associés
+  print_time_h    DECIMAL(6,2) DEFAULT 0   COMMENT 'Durée estimée en heures',
+  filament_g      DECIMAL(8,2) DEFAULT 0   COMMENT 'Quantité filament en grammes',
+  filament_id     INT DEFAULT NULL,
+  printer_id      INT DEFAULT NULL,
+  FOREIGN KEY (filament_id) REFERENCES filaments(id) ON DELETE SET NULL,
+  FOREIGN KEY (printer_id)  REFERENCES printers(id)  ON DELETE SET NULL
+);
+
+-- Paramètres globaux devis
+INSERT IGNORE INTO settings (key_name, value) VALUES
+  ('quote_margin_default', '20'),
+  ('quote_electricity_rate', '0.20'),
+  ('quote_company_name', ''),
+  ('quote_company_info', '');
+
+-- ── v2.1.0 — Planning d'impression ───────────────────────────────────────
+CREATE TABLE IF NOT EXISTS print_schedule (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  title        VARCHAR(255) NOT NULL,
+  description  TEXT,
+  printer_id   INT DEFAULT NULL,
+  filament_id  INT DEFAULT NULL,
+  planned_at   DATETIME NOT NULL COMMENT 'Date/heure planifiée',
+  duration_h   DECIMAL(6,2) DEFAULT 0,
+  status       ENUM('planned','in_progress','done','cancelled') DEFAULT 'planned',
+  print_id     INT DEFAULT NULL COMMENT 'Impression liée si réalisée',
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (printer_id)  REFERENCES printers(id)  ON DELETE SET NULL,
+  FOREIGN KEY (filament_id) REFERENCES filaments(id) ON DELETE SET NULL,
+  FOREIGN KEY (print_id)    REFERENCES prints(id)    ON DELETE SET NULL
+);
+
+-- ── v2.1.0 rev — Planning intégré dans prints ────────────────────────────
+-- Ajouter planned_at et le statut planned dans prints
+ALTER TABLE prints
+  MODIFY COLUMN status ENUM('queued','planned','printing','paused','done','failed','cancelled')
+    DEFAULT 'queued',
+  ADD COLUMN IF NOT EXISTS planned_at DATETIME DEFAULT NULL
+    COMMENT 'Date/heure planifiée';
+
+-- Supprimer la table séparée (migration propre)
+DROP TABLE IF EXISTS print_schedule;
+
+-- ── v2.1.0 — Toggle devis ────────────────────────────────────────────────
+INSERT IGNORE INTO settings (key_name, value) VALUES ('quotes_enabled', 'true');
