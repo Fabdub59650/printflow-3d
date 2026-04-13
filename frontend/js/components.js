@@ -1,7 +1,8 @@
 function openModal(html, title, options) {
   const modal = document.getElementById('modal');
   const tabbed = options && options.tabbed;
-  modal.className = 'modal' + (tabbed ? ' modal-tabbed' : '');
+  const wide   = options && options.wide;
+  modal.className = 'modal' + (tabbed ? ' modal-tabbed' : '') + (wide ? ' modal-wide' : '');
 
   if (tabbed) {
     // Séparer le footer du reste pour le garder fixe en bas
@@ -58,6 +59,7 @@ function statusBadge(status) {
     failed: ['badge-danger', 'Échec'],
     cancelled: ['badge-neutral', 'Annulé'],
     queued: ['badge-neutral', 'En attente'],
+    planned: ['badge-info', 'Planifié'],
   };
   const [cls, label] = map[status] || ['badge-neutral', status];
   return `<span class="badge ${cls}">${label}</span>`;

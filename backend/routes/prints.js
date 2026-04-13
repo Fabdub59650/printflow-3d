@@ -157,16 +157,17 @@ router.post('/', async (req, res) => {
   try {
     const { name, printer_id, filament_id, file_name, status, estimated_duration,
             filament_used, layer_height, infill_percent, print_temp, bed_temp, notes,
-            project_id, project_item_name, library_object_id, library_file_id } = req.body;
+            project_id, project_item_name, library_object_id, library_file_id, planned_at } = req.body;
     const started_at = status === 'printing' ? new Date() : null;
     const [result] = await db.query(
       `INSERT INTO prints (name,printer_id,filament_id,file_name,status,estimated_duration,
         filament_used,layer_height,infill_percent,print_temp,bed_temp,notes,started_at,
-        project_id,project_item_name,library_object_id,library_file_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        project_id,project_item_name,library_object_id,library_file_id,planned_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [name,printer_id,filament_id,file_name,status||'queued',estimated_duration,
        filament_used,layer_height,infill_percent,print_temp,bed_temp,notes,started_at,
-       project_id||null,project_item_name||null,library_object_id||null,library_file_id||null]
+       project_id||null,project_item_name||null,library_object_id||null,library_file_id||null,
+       planned_at||null]
     );
     if (printer_id && status === 'printing') {
       await db.query('UPDATE printers SET status=? WHERE id=?', ['printing', printer_id]);
@@ -239,7 +240,8 @@ router.put('/:id', async (req, res) => {
     const { name, printer_id, filament_id, file_name, status, progress,
             estimated_duration, actual_duration, filament_used,
             layer_height, infill_percent, print_temp, bed_temp, notes,
-            project_id, project_item_name, library_object_id, library_file_id } = req.body;
+            project_id, project_item_name, library_object_id, library_file_id,
+            planned_at } = req.body;
 
     const [existing] = await db.query('SELECT * FROM prints WHERE id=?', [req.params.id]);
     if (!existing.length) return res.status(404).json({ error: 'Non trouvé' });
@@ -254,13 +256,15 @@ router.put('/:id', async (req, res) => {
       `UPDATE prints SET name=?,printer_id=?,filament_id=?,file_name=?,status=?,progress=?,
         estimated_duration=?,actual_duration=?,filament_used=?,layer_height=?,
         infill_percent=?,print_temp=?,bed_temp=?,notes=?,started_at=?,finished_at=?,
-        project_id=?,project_item_name=?,library_object_id=?,library_file_id=? WHERE id=?`,
+        project_id=?,project_item_name=?,library_object_id=?,library_file_id=?,
+        planned_at=? WHERE id=?`,
       [name,printer_id,filament_id,file_name,status,progress||0,
        estimated_duration,actual_duration,filament_used,layer_height,
        infill_percent,print_temp,bed_temp,notes,started_at,finished_at,
        project_id||null,project_item_name||null,
        'library_object_id' in req.body ? (req.body.library_object_id||null) : prev.library_object_id,
        'library_file_id' in req.body ? (req.body.library_file_id||null) : prev.library_file_id,
+       planned_at !== undefined ? planned_at||null : prev.planned_at,
        req.params.id]
     );
 

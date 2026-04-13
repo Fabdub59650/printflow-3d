@@ -9,6 +9,8 @@ const TAB_RENDERERS = {
   stats:       renderStats,
   settings:    renderSettings,
   history:     renderHistory,
+  quotes:      renderQuotes,
+  schedule:    renderSchedule,
 };
 
 let currentTab = 'dashboard';
@@ -145,6 +147,11 @@ window._projectsEnabled        = true;  // activé par défaut
     window._stockAlertEnabled      = s.stock_alert_enabled === 'true';
     window._maintenanceAlertEnabled = s.maintenance_alert_enabled === 'true';
     window._projectsEnabled        = s.projects_enabled    !== 'false';
+    window._quotesEnabled          = s.quotes_enabled      !== 'false';
+
+    // Appliquer la visibilité de l'onglet Devis
+    const navQuotes = document.getElementById('nav-quotes');
+    if (navQuotes) navQuotes.style.display = window._quotesEnabled ? '' : 'none';
 
     // Appliquer la visibilité de l'onglet Projets
     const navProjects = document.getElementById('nav-projects');

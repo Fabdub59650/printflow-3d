@@ -60,6 +60,11 @@ app.use('/api/library',     require('./routes/library'));
 // Consommables imprimantes
 app.use('/api/consumables', require('./routes/consumables'));
 
+// Tapo P100 — prises connectées
+app.use('/api/tapo',     require('./routes/tapo'));
+
+// Devis client
+app.use('/api/quotes',   require('./routes/quotes'));
 // Rapport hebdomadaire
 app.use('/api/report', require('./routes/report'));
 

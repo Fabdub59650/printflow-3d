@@ -213,7 +213,7 @@ async function openPrintDetail(id) {
   );
 }
 
-async function openPrintForm(id = null, prefillProjectId = null) {
+async function openPrintForm(id = null, prefillProjectId = null, defaultStatus = null) {
   const [printers, filaments, projects, libraryObjects] = await Promise.all([
     API.get('/printers'),
     API.get('/filaments'),
@@ -221,6 +221,7 @@ async function openPrintForm(id = null, prefillProjectId = null) {
     API.get('/library/objects').catch(() => []),
   ]);
   const p = id ? allPrints.find(x => x.id === id) || await API.get('/prints/' + id) : {};
+  if (!id && defaultStatus) p.status = defaultStatus;
   const selectedProject = prefillProjectId || p.project_id || '';
   const selectedObject  = p.library_object_id || '';
 
@@ -299,14 +300,23 @@ async function openPrintForm(id = null, prefillProjectId = null) {
     <!-- ── Suivi ─────────────────────────────────────────── -->
     <div style="border-top:0.5px solid var(--border2);padding-top:12px;margin-bottom:12px">
       <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Suivi</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
+      <!-- Ligne 1 : Statut + Date planifiée -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <div>
           <label class="form-label">Statut</label>
-          <select id="prf-status">
-            ${['queued','printing','paused','done','failed','cancelled'].map(s =>
-              `<option value="${s}" ${(p.status||'queued')==s?'selected':''}>${s}</option>`).join('')}
+          <select id="prf-status" onchange="togglePlannedAt(this.value)">
+            ${['planned','queued','printing','paused','done','failed','cancelled'].map(s =>
+              `<option value="${s}" ${(p.status||'queued')==s?'selected':''}>${statusBadge(s).replace(/<[^>]+>/g,'').trim()}</option>`).join('')}
           </select>
         </div>
+        <div id="prf-planned-at-wrap" style="display:${(p.status==='planned')?'block':'none'}">
+          <label class="form-label">Date planifiée</label>
+          <input id="prf-planned-at" type="datetime-local"
+            value="${p.planned_at ? new Date(p.planned_at).toISOString().slice(0,16) : ''}">
+        </div>
+      </div>
+      <!-- Ligne 2 : Progression + Durées -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
         <div>
           <label class="form-label">Progression (%)</label>
           <input id="prf-progress" type="number" min="0" max="100" value="${p.progress||0}">
@@ -401,6 +411,7 @@ async function savePrint(id) {
     library_object_id: document.getElementById('prf-library-object')?.value || null,
     library_file_id:   document.getElementById('prf-library-file')?.value || null,
     status:            document.getElementById('prf-status').value,
+    planned_at:        document.getElementById('prf-planned-at')?.value || null,
     progress:          document.getElementById('prf-progress').value || 0,
     estimated_duration: document.getElementById('prf-edur').value || null,
     actual_duration:    document.getElementById('prf-adur').value || null,
@@ -769,4 +780,19 @@ async function ratePrint(printId, rating) {
     openPrintDetail(printId);
     renderPrints();
   } catch(e) { toast(e.message, 'error'); }
+}
+
+function togglePlannedAt(status) {
+  var wrap = document.getElementById('prf-planned-at-wrap');
+  if (wrap) wrap.style.display = status === 'planned' ? 'block' : 'none';
+  // Pré-remplir demain 8h si vide
+  if (status === 'planned') {
+    var input = document.getElementById('prf-planned-at');
+    if (input && !input.value) {
+      var d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(8, 0, 0, 0);
+      input.value = d.toISOString().slice(0, 16);
+    }
+  }
 }

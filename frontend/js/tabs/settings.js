@@ -138,6 +138,19 @@ async function renderSettings() {
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
           <div>
+            <div style="font-size:13px">Gestion des devis</div>
+            <div style="font-size:11px;color:var(--text3)">Affiche l'onglet Devis pour créer et suivre les devis clients</div>
+          </div>
+          <div onclick="toggleSetting('quotes_enabled', this)" id="toggle-quotes-enabled"
+               data-enabled="${settings.quotes_enabled!=='false'?'1':'0'}"
+               style="width:40px;height:22px;border-radius:11px;cursor:pointer;transition:background 0.2s;
+                      background:${settings.quotes_enabled!=='false'?'var(--accent)':'var(--border2)'};position:relative;flex-shrink:0">
+            <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;
+                        top:2px;transition:left 0.2s;left:${settings.quotes_enabled!=='false'?'19px':'2px'}"></div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <div>
             <div style="font-size:13px">Alertes stock filament</div>
             <div style="font-size:11px;color:var(--text3)">Affiche un avertissement sur le dashboard quand une bobine est presque vide</div>
           </div>
@@ -467,6 +480,44 @@ async function renderSettings() {
       </div>
     </div>
 
+    <!-- ── Tapo P100 ─────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🔌 Tapo P100 — Prises connectées</span>
+        <div onclick="toggleTapoEnabled(this)" id="toggle-tapo-enabled"
+             data-enabled="${settings.tapo_enabled==='true'?'1':'0'}"
+             style="width:40px;height:22px;border-radius:11px;cursor:pointer;transition:background 0.2s;
+                    background:${settings.tapo_enabled==='true'?'var(--accent)':'var(--border2)'};position:relative;flex-shrink:0">
+          <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;
+                      top:2px;transition:left 0.2s;left:${settings.tapo_enabled==='true'?'19px':'2px'}"></div>
+        </div>
+      </div>
+      <div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--warning)">
+        ⚠ <strong>Compatibilité firmware 1.4.0+</strong> — Le protocole KLAP local est restreint aux apps officielles Tapo.
+        Le contrôle via cloud fonctionne uniquement si les prises sont en ligne sur les serveurs TP-Link.
+        Cette limitation sera levée lors d'une mise à jour de la librairie tp-link-tapo-connect.
+      </div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        Identifiants du compte Tapo — utilisés pour l'authentification cloud.
+        Le mot de passe est chiffré AES-256 en base de données.
+      </p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Email du compte Tapo</label>
+          <input id="set-tapo-email" type="email" value="${settings.tapo_email||''}" placeholder="votre@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mot de passe Tapo</label>
+          <input id="set-tapo-password" type="password" placeholder="${settings.tapo_password ? '••••••••' : 'mot de passe Tapo'}">
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Laisser vide pour ne pas modifier.</div>
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <button class="btn btn-primary" onclick="saveTapoCredentials()">Enregistrer les identifiants</button>
+        <div id="tapo-creds-result" style="margin-top:8px;font-size:13px"></div>
+      </div>
+    </div>
+
     <!-- ── TigerTag Scale ───────────────────────── -->
     <div class="card">
       <div class="card-header"><span class="card-title">TigerTag Scale</span></div>
@@ -713,7 +764,7 @@ function toggleSetting(key, el) {
     const navProjects = document.getElementById('nav-projects');
     if (navProjects) navProjects.style.display = enabled ? '' : 'none';
     // Si on désactive et qu'on est sur l'onglet projets → revenir au dashboard
-    if (!enabled && window._currentTab === 'projects') {
+    if (!enabled && currentTab === 'projects') {
       switchTab('dashboard');
     }
   
@@ -721,6 +772,11 @@ function toggleSetting(key, el) {
   if (key === 'report_enabled') {
     var cfgEl = document.getElementById('report-config');
     if (cfgEl) cfgEl.style.display = enabled ? 'block' : 'none';
+  }
+  if (key === 'quotes_enabled') {
+    var navQ = document.getElementById('nav-quotes');
+    if (navQ) navQ.style.display = enabled ? '' : 'none';
+    if (!enabled && currentTab === 'quotes') switchTab('dashboard');
   }
 }
 
@@ -786,6 +842,7 @@ async function saveSettings() {
   const togPrices    = document.getElementById('toggle-show-prices');
   const togLocs      = document.getElementById('toggle-show-locations');
   const togProjects  = document.getElementById('toggle-projects-enabled');
+  const togQuotes    = document.getElementById('toggle-quotes-enabled');
   const body = {
     app_name:       document.getElementById('set-app-name')?.value,
     library_path:        document.getElementById('set-library-path')?.value,
@@ -797,6 +854,7 @@ async function saveSettings() {
     show_prices:           togPrices   ? String(togPrices.dataset.enabled   === '1') : 'true',
     show_locations:        togLocs     ? String(togLocs.dataset.enabled     === '1') : 'true',
     projects_enabled:      togProjects ? String(togProjects.dataset.enabled === '1') : 'true',
+    quotes_enabled:        togQuotes   ? String(togQuotes.dataset.enabled   === '1') : 'true',
     stock_alert_enabled:        document.getElementById('toggle-stock-alert')?.dataset.enabled === '1' ? 'true' : 'false',
     stock_alert_threshold:      document.getElementById('set-stock-threshold')?.value || '20',
     maintenance_alert_enabled:  document.getElementById('toggle-maintenance-alert')?.dataset.enabled === '1' ? 'true' : 'false',
@@ -812,6 +870,9 @@ async function saveSettings() {
     const logoEl  = document.querySelector('.logo-name');
     if (logoEl) logoEl.textContent = newName;
     document.title = newName;
+    // Appliquer la visibilité des onglets
+    const navQuotes = document.getElementById('nav-quotes');
+    if (navQuotes) navQuotes.style.display = body.quotes_enabled === 'true' ? '' : 'none';
     checkSpoolmanStatus();
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -1280,6 +1341,7 @@ function renderPurgeSection() {
     { id:'purge-consumables', label:'\uD83D\uDD29 Consommables',        danger:false, cnt:'cnt-consumables'  },
     { id:'purge-projects',    label:'\uD83D\uDCCB Projets',             danger:false, cnt:'cnt-projects'     },
     { id:'purge-history',     label:'\uD83D\uDCDC Historique',          danger:false, cnt:'cnt-history'      },
+    { id:'purge-quotes',      label:'\uD83D\uDCC4 Devis',               danger:false, cnt:'cnt-quotes'       },
     { id:'purge-filaments',   label:'\uD83E\uDDF5 Filaments',           danger:true,  cnt:'cnt-filaments'    },
     { id:'purge-printers',    label:'\uD83D\uDDA8 Imprimantes',         danger:true,  cnt:'cnt-printers'     },
     { id:'purge-library',     label:'\uD83D\uDCDA Biblioth\u00E8que',   danger:true,  cnt:'cnt-library', full:true },
@@ -1299,8 +1361,7 @@ function renderPurgeSection() {
     '<div id="purge-form" style="display:none">' +
       '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">' +
       items.map(function(item) {
-        var border = item.danger ? 'border:1px solid rgba(239,68,68,0.3);' : '';
-        return '<label class="purge-check" style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);' + border + '">' +
+        return '<label class="purge-check" style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);">' +
           '<input type="checkbox" id="' + item.id + '" onchange="updatePurgeBtn()" style="flex-shrink:0;width:16px;height:16px">' +
           '<span style="flex:1">' + item.label + '</span>' +
           '<span id="' + item.cnt + '" style="font-size:11px;color:var(--text3)"></span>' +
@@ -1341,7 +1402,8 @@ async function loadPurgeStats() {
       'cnt-maintenance':  (stats.maintenance||0) + ' entrée' + (stats.maintenance!=1?'s':''),
       'cnt-consumables':  (stats.consumables||0) + ' consommable' + (stats.consumables!=1?'s':''),
       'cnt-projects':     (stats.projects||0) + ' projet' + (stats.projects!=1?'s':''),
-      'cnt-history':      (stats.history_log||0) + ' entrée' + (stats.history_log!=1?'s':''),
+      'cnt-history':      (stats.history_log||0) + ' entrée' + ((stats.history_log||0)!=1?'s':''),
+      'cnt-quotes':       (stats.quotes||0) + ' devis',
       'cnt-filaments':    (stats.filaments||0) + ' bobine' + (stats.filaments!=1?'s':''),
       'cnt-printers':     (stats.printers||0) + ' imprimante' + (stats.printers!=1?'s':''),
       'cnt-library':      (stats.library_objects||0) + ' objet' + (stats.library_objects!=1?'s':'') +
@@ -1388,6 +1450,7 @@ async function executePurge() {
     'purge-consumables':  ['consumables'],
     'purge-projects':     ['projects'],
     'purge-history':      ['history_log'],
+    'purge-quotes':       ['quotes'],
     'purge-filaments':    ['filaments'],
     'purge-printers':     ['printers'],
     'purge-library':      ['library_files', 'library_objects'],
@@ -1437,5 +1500,47 @@ function previewColorMode(mode) {
     var from = document.getElementById('set-dark-from')?.value || '20';
     var to   = document.getElementById('set-dark-to')?.value   || '7';
     applyColorMode(mode || null, from, to);
+  }
+}
+
+// ── Tapo P100 credentials ──────────────────────────────────────────────────
+async function saveTapoCredentials() {
+  var email    = document.getElementById('set-tapo-email')?.value?.trim();
+  var password = document.getElementById('set-tapo-password')?.value;
+  var resultEl = document.getElementById('tapo-creds-result');
+  if (!email) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger)">Email requis</span>';
+    return;
+  }
+  try {
+    await fetch('/api/tapo/tapo-credentials', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: password || '' })
+    }).then(function(r) { return r.json(); });
+    if (resultEl) resultEl.innerHTML = '<span style="color:#10b981">✓ Identifiants sauvegardés</span>';
+    toast('Identifiants Tapo sauvegardés ✓', 'success');
+    if (document.getElementById('set-tapo-password'))
+      document.getElementById('set-tapo-password').value = '';
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--danger)">Erreur : ' + e.message + '</span>';
+  }
+}
+
+// ── Toggle Tapo enabled ────────────────────────────────────────────────────
+async function toggleTapoEnabled(el) {
+  var enabled = el.dataset.enabled !== '1';
+  el.dataset.enabled = enabled ? '1' : '0';
+  el.style.background = enabled ? 'var(--accent)' : 'var(--border2)';
+  el.querySelector('div').style.left = enabled ? '19px' : '2px';
+  try {
+    await fetch('/api/tapo/tapo-credentials', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    toast('Tapo ' + (enabled ? 'activé' : 'désactivé'), 'success');
+  } catch(e) {
+    toast('Erreur : ' + e.message, 'error');
   }
 }

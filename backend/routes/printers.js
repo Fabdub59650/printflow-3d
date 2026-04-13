@@ -101,10 +101,10 @@ router.post('/', async (req, res) => {
             temp_nozzle_max, temp_bed_max, location, notes, power_consumption, has_ams } = req.body;
     const [result] = await db.query(
       `INSERT INTO printers (name,model,ip_address,interface_type,interface_url,api_key,
-        volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,location,notes,power_consumption,has_ams)
+        volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,location,notes,power_consumption,has_ams,tapo_ip)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [name,model,ip_address,interface_type,interface_url,api_key,
-       volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,location,notes,power_consumption||null,has_ams||0]
+       volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,location,notes,power_consumption||null,has_ams||0,tapo_ip||null]
     );
     const [rows] = await db.query('SELECT * FROM printers WHERE id = ?', [result.insertId]);
     await logAction('printer', result.insertId, 'create', 'Imprimante créée : ' + rows[0].name);
@@ -117,14 +117,14 @@ router.put('/:id', async (req, res) => {
   try {
     const { name, model, ip_address, interface_type, interface_url, api_key,
             volume_x, volume_y, volume_z, nozzle_size, nozzle_count,
-            temp_nozzle_max, temp_bed_max, location, notes, status, power_consumption, has_ams } = req.body;
+            temp_nozzle_max, temp_bed_max, location, notes, status, power_consumption, has_ams, tapo_ip } = req.body;
     await db.query(
       `UPDATE printers SET name=?,model=?,ip_address=?,interface_type=?,interface_url=?,api_key=?,
         volume_x=?,volume_y=?,volume_z=?,nozzle_size=?,nozzle_count=?,temp_nozzle_max=?,temp_bed_max=?,
-        location=?,notes=?,status=?,power_consumption=?,has_ams=? WHERE id=?`,
+        location=?,notes=?,status=?,power_consumption=?,has_ams=?,tapo_ip=? WHERE id=?`,
       [name,model,ip_address,interface_type,interface_url,api_key,
        volume_x,volume_y,volume_z,nozzle_size,nozzle_count,temp_nozzle_max,temp_bed_max,
-       location,notes,status,power_consumption||null,has_ams||0,req.params.id]
+       location,notes,status,power_consumption||null,has_ams||0,tapo_ip||null,req.params.id]
     );
     const [rows] = await db.query('SELECT * FROM printers WHERE id = ?', [req.params.id]);
     await logAction('printer', req.params.id, 'update', 'Imprimante modifiée : ' + rows[0].name);

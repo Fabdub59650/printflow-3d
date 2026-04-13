@@ -1,6 +1,6 @@
 {
   "name": "printflow",
-  "version": "1.9.0",
+  "version": "2.1.0",
   "description": "PrintFlow — Gestion impressions 3D",
   "main": "server.js",
   "scripts": {
@@ -17,7 +17,8 @@
     "multer": "^2.1.1",
     "nfc-pcsc": "^0.8.1",
     "nodemailer": "^6.9.8",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "tp-link-tapo-connect": "^2.0.15"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

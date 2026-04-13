@@ -16,6 +16,10 @@ function renderPrinterCards() {
     return;
   }
   container.innerHTML = `<div class="printer-grid">${allPrinters.map(printerCard).join('')}</div>`;
+  // Démarrer le polling Tapo si au moins une prise configurée
+  if (allPrinters.some(function(p) { return p.tapo_ip; })) {
+    startTapoPolling();
+  }
 }
 
 function printerCard(p) {
@@ -102,6 +106,14 @@ async function openPrinterDetail(id, activeTab) {
           '<div class="stat-row"><span class="stat-label">Buse</span><span class="stat-val">Ø' + p.nozzle_size + 'mm · max ' + p.temp_nozzle_max + '°C</span></div>' +
           '<div class="stat-row"><span class="stat-label">Plateau max</span><span class="stat-val">' + p.temp_bed_max + '°C</span></div>' +
           '<div class="stat-row"><span class="stat-label">Puissance</span><span class="stat-val">' + (p.power_consumption ? p.power_consumption + ' W' : '—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Prise Tapo</span><span class="stat-val" id="tapo-detail-state-' + p.id + '">' +
+          (p.tapo_ip ? '<span style="color:var(--text3);font-size:12px">' + p.tapo_ip + '</span>' : '—') +
+          '</span></div>' +
+        (p.tapo_ip ?
+          '<div style="display:flex;gap:6px;margin-top:6px;margin-bottom:4px">' +
+            '<button class="btn btn-sm" style="background:#dcfce7;color:#16a34a;border:none" onclick="tapoControl(' + p.id + ',\'on\')">⏻ Allumer</button>' +
+            '<button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:none" onclick="tapoControl(' + p.id + ',\'off\')">⏻ Éteindre</button>' +
+          '</div>' : '') +
         '<div class="stat-row"><span class="stat-label">AMS / Multi-filaments</span><span class="stat-val">' + (p.has_ams ? '<span style="color:#10b981;font-weight:500">✓ Oui</span>' : '<span style="color:var(--text3)">Non</span>') + '</span></div>' +
           '<div class="stat-row"><span class="stat-label">Interface</span><span class="stat-val">' + interfaceTypeLabel(p.interface_type) + '</span></div>' +
           '<div class="stat-row"><span class="stat-label">IP</span><span class="stat-val">' + (p.ip_address||'—') + '</span></div>' +
@@ -215,6 +227,21 @@ async function openPrinterDetail(id, activeTab) {
   // Charger le graphique si onglet fiabilité
   if (activeTab === 'fiabilite') {
     loadReliabilityChart(id, 12, 'month');
+  }
+  // Charger l'état Tapo si configuré
+  if (p.tapo_ip && activeTab === 'infos') {
+    API.get('/tapo/' + id + '/tapo').then(function(state) {
+      var el = document.getElementById('tapo-detail-state-' + id);
+      if (!el) return;
+      if (!state.available) {
+        el.innerHTML = '<span style="color:var(--text3);font-size:12px">' + p.tapo_ip + ' — hors ligne</span>';
+        return;
+      }
+      var color = state.on ? '#16a34a' : '#dc2626';
+      var label = state.on ? '✓ Allumée' : '✗ Éteinte';
+      el.innerHTML = '<span style="color:' + color + ';font-weight:500">' + label + '</span>' +
+        '<span style="font-size:11px;color:var(--text3);margin-left:6px">' + p.tapo_ip + '</span>';
+    }).catch(function() {});
   }
 }
 
@@ -337,6 +364,7 @@ function reloadReliability(printerId) {
 
 
 function openPrinterForm(id = null) {
+  window._editingPrinterId = id || null;
   const p = id ? allPrinters.find(x => x.id === id) : {};
   const title = id ? 'Modifier ' + p.name : 'Nouvelle imprimante';
   openModal(`
@@ -384,8 +412,16 @@ function openPrinterForm(id = null) {
       <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Connexion</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
-          <label class="form-label">Adresse IP</label>
+          <label class="form-label">Adresse IP imprimante</label>
           <input id="pf-ip" value="${p.ip_address||''}" placeholder="192.168.1.100">
+        </div>
+        <div>
+          <label class="form-label">IP Prise Tapo P100</label>
+          <div style="display:flex;gap:6px">
+            <input id="pf-tapo-ip" value="${p.tapo_ip||''}" placeholder="192.168.1.x (optionnel)" style="flex:1">
+            <button type="button" class="btn btn-sm" onclick="testTapoConnection()" title="Tester la connexion">🔌 Test</button>
+          </div>
+          <div id="pf-tapo-test-result" style="font-size:11px;margin-top:4px"></div>
         </div>
         <div>
           <label class="form-label">Type d'interface</label>
@@ -462,10 +498,10 @@ function openPrinterForm(id = null) {
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" onclick="savePrinter(${id||'null'})">Enregistrer</button>
-    </div>`, title);
+    </div>`, title, { wide: true });
 }
 
-async function savePrinter(id) {
+async function savePrinter(id, silent) {
   const body = {
     name: document.getElementById('pf-name').value,
     model: document.getElementById('pf-model').value,
@@ -484,15 +520,28 @@ async function savePrinter(id) {
     notes: document.getElementById('pf-notes').value,
     power_consumption: document.getElementById('pf-power')?.value || null,
     has_ams: document.getElementById('pf-ams-toggle')?.dataset.enabled === '1' ? 1 : 0,
+    tapo_ip: document.getElementById('pf-tapo-ip')?.value || null,
   };
-  if (!body.name) return toast('Le nom est requis', 'error');
+  if (!body.name) { toast('Le nom est requis', 'error'); return null; }
   try {
-    if (id) await API.put('/printers/' + id, body);
-    else await API.post('/printers', body);
-    closeModal();
-    toast(id ? 'Imprimante mise à jour' : 'Imprimante ajoutée', 'success');
-    renderPrinters();
-  } catch (e) { toast(e.message, 'error'); }
+    let result;
+    if (id) {
+      result = await API.put('/printers/' + id, body);
+    } else {
+      result = await API.post('/printers', body);
+    }
+    const newId = result?.id || id;
+    window._editingPrinterId = newId;
+    if (!silent) {
+      closeModal();
+      toast(id ? 'Imprimante mise à jour' : 'Imprimante ajoutée', 'success');
+      renderPrinters();
+    } else {
+      // Mettre à jour allPrinters en mémoire
+      allPrinters = await API.get('/printers');
+    }
+    return newId;
+  } catch (e) { toast(e.message, 'error'); return null; }
 }
 
 async function deletePrinter(id) {
@@ -609,4 +658,142 @@ function togglePrinterAms(el) {
   el.dataset.enabled = enabled ? '1' : '0';
   el.style.background = enabled ? 'var(--accent)' : 'var(--border2)';
   el.querySelector('div').style.left = enabled ? '19px' : '2px';
+}
+
+// ── Tapo P100 ────────────────────────────────────────────────────────────────
+var _tapoPollingInterval = null;
+
+// Mettre à jour le badge dans la carte imprimante
+function updateTapoBadge(printerId, state) {
+  var badge = document.getElementById('tapo-badge-' + printerId);
+  if (!badge) return;
+  if (state.available === false) {
+    badge.style.background = 'var(--bg3)';
+    badge.style.color      = 'var(--text3)';
+    badge.textContent      = '⏻ Hors ligne';
+    return;
+  }
+  if (state.on) {
+    badge.style.background = '#dcfce7';
+    badge.style.color      = '#16a34a';
+    badge.textContent      = '⏻ Allumée';
+  } else {
+    badge.style.background = '#fee2e2';
+    badge.style.color      = '#dc2626';
+    badge.textContent      = '⏻ Éteinte';
+  }
+}
+
+// Rafraîchir l'état de toutes les prises visibles
+async function refreshAllTapoStates() {
+  var badges = document.querySelectorAll('.tapo-badge[data-id]');
+  for (var i = 0; i < badges.length; i++) {
+    var id = badges[i].dataset.id;
+    try {
+      var state = await API.get('/tapo/' + id + '/tapo');
+      updateTapoBadge(id, state);
+    } catch(_) {}
+  }
+}
+
+// Allumer / éteindre (toggle)
+async function tapoToggle(printerId) {
+  try {
+    var badge = document.getElementById('tapo-badge-' + printerId);
+    if (badge) { badge.style.opacity = '0.5'; badge.style.cursor = 'wait'; }
+    var result = await API.post('/tapo/' + printerId + '/tapo', { action: 'toggle' });
+    updateTapoBadge(printerId, { available: true, on: result.on });
+    toast('Prise ' + (result.on ? 'allumée ✓' : 'éteinte ✓'), 'success');
+    if (badge) { badge.style.opacity = '1'; badge.style.cursor = 'pointer'; }
+  } catch(e) {
+    toast('Prise inaccessible : ' + e.message, 'error');
+    var badge = document.getElementById('tapo-badge-' + printerId);
+    if (badge) { badge.style.opacity = '1'; badge.style.cursor = 'pointer'; }
+  }
+}
+
+// Contrôle explicite depuis la fiche détail
+async function tapoControl(printerId, action) {
+  try {
+    var result = await API.post('/tapo/' + printerId + '/tapo', { action });
+    toast('Prise ' + (result.on ? 'allumée ✓' : 'éteinte ✓'), 'success');
+    updateTapoBadge(printerId, { available: true, on: result.on });
+    var stateEl = document.getElementById('tapo-detail-state-' + printerId);
+    if (stateEl) {
+      var color = result.on ? '#16a34a' : '#dc2626';
+      var label = result.on ? '✓ Allumée' : '✗ Éteinte';
+      stateEl.innerHTML = '<span style="color:' + color + ';font-weight:500">' + label + '</span>';
+    }
+  } catch(e) {
+    // Afficher le message d'erreur avec détail si disponible
+    var msg = e.detail || e.message;
+    if (msg && msg.includes('desactivee')) {
+      toast('Tapo désactivé — activez dans Paramètres → Intégrations', 'error');
+    } else if (msg && msg.includes('offline')) {
+      toast('Prise hors ligne (firmware 1.4.0+ — voir Paramètres → Intégrations)', 'error');
+    } else {
+      toast('Erreur prise : ' + msg, 'error');
+    }
+  }
+}
+
+// Tester la connexion depuis le formulaire
+async function testTapoConnection() {
+  var result = document.getElementById('pf-tapo-test-result');
+  var ip = document.getElementById('pf-tapo-ip')?.value?.trim();
+  if (!ip) { if (result) result.innerHTML = '<span style="color:var(--danger)">Saisissez une IP</span>'; return; }
+  if (result) result.innerHTML = '<span style="color:var(--text3)">Sauvegarde et test en cours…</span>';
+
+  // Sauvegarder silencieusement pour obtenir un ID valide
+  var printerId = await savePrinter(window._editingPrinterId || null, true);
+  if (!printerId) {
+    if (result) result.innerHTML = '<span style="color:var(--danger)">Renseignez le nom de l\'imprimante d\'abord</span>';
+    return;
+  }
+
+  try {
+    var r = await fetch('/api/tapo/' + printerId + '/tapo/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip })
+    });
+    var data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    if (data.needSelection) {
+      if (result) result.innerHTML =
+        '<div style="margin-top:6px;font-size:12px;color:var(--text2)">Sélectionnez la prise à associer :<br>' +
+        data.devices.map(function(d) {
+          return '<button class="btn btn-sm" style="margin:3px" ' +
+            'onclick="assignTapoPrise(' + printerId + ',\'' + d.mac + '\',\'' + d.alias.replace(/'/g,"\\'") + '\')">' +
+            d.alias + ' (' + d.model + ')</button>';
+        }).join('') + '</div>';
+    } else {
+      if (result) result.innerHTML = '<span style="color:#16a34a">✓ Prise trouvée et associée</span>';
+    }
+  } catch(e) {
+    if (result) result.innerHTML = '<span style="color:var(--danger)">✗ ' + e.message + '</span>';
+  }
+}
+
+// Démarrer le polling d'état (toutes les 15s)
+function startTapoPolling() {
+  if (_tapoPollingInterval) clearInterval(_tapoPollingInterval);
+  refreshAllTapoStates();
+  _tapoPollingInterval = setInterval(refreshAllTapoStates, 15000);
+}
+function stopTapoPolling() {
+  if (_tapoPollingInterval) { clearInterval(_tapoPollingInterval); _tapoPollingInterval = null; }
+}
+
+async function assignTapoPrise(printerId, mac, alias) {
+  var result = document.getElementById('pf-tapo-test-result');
+  try {
+    await API.post('/tapo/' + printerId + '/tapo/assign', { mac, alias });
+    if (result) result.innerHTML = '<span style="color:#16a34a">✓ Prise "' + alias + '" associée ✓</span>';
+    toast('"' + alias + '" associée à l\'imprimante', 'success');
+    // Mettre à jour allPrinters
+    allPrinters = await API.get('/printers');
+  } catch(e) {
+    if (result) result.innerHTML = '<span style="color:var(--danger)">✗ ' + e.message + '</span>';
+  }
 }

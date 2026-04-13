@@ -8,7 +8,7 @@ router.get('/', async (req, res) => {
     const settings = {};
     rows.forEach(r => { settings[r.key_name] = r.value; });
     // Informations de version (non stockées en base)
-    settings._version    = '1.9.0';
+    settings._version    = '2.1.0';
     settings._build_date = '13/04/2026';
     res.json(settings);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -60,6 +60,7 @@ router.get('/purge-stats', async (req, res) => {
       ['consumables',       'SELECT COUNT(*) AS n FROM consumables'],
       ['projects',          'SELECT COUNT(*) AS n FROM projects'],
       ['history_log',       'SELECT COUNT(*) AS n FROM history_log'],
+      ['quotes',            'SELECT COUNT(*) AS n FROM quotes'],
       ['filaments',         'SELECT COUNT(*) AS n FROM filaments'],
       ['printers',          'SELECT COUNT(*) AS n FROM printers'],
       ['library_objects',   'SELECT COUNT(*) AS n FROM library_objects'],
@@ -88,6 +89,7 @@ router.post('/purge', async (req, res) => {
       'prints', 'print_filaments', 'filament_weighings',
       'maintenance', 'consumables', 'projects', 'history_log',
       'filaments', 'printers', 'library_objects', 'library_files',
+      'quotes',
     ];
     const invalid = tables.filter(function(t) { return !ALLOWED.includes(t); });
     if (invalid.length) return res.status(400).json({ error: 'Table non autorisée : ' + invalid.join(', ') });
@@ -102,6 +104,7 @@ router.post('/purge', async (req, res) => {
       'consumables', 'history_log',
       'prints',       // après print_filaments
       'projects',
+      'quotes',
       'library_files', 'library_objects',
       'filaments', 'printers',
     ];
