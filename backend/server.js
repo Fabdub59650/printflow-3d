@@ -60,6 +60,9 @@ app.use('/api/library',     require('./routes/library'));
 // Consommables imprimantes
 app.use('/api/consumables', require('./routes/consumables'));
 
+// Moonraker — suivi temps réel imprimantes Klipper
+app.use('/api/moonraker', require('./routes/moonraker'));
+
 // Tapo P100 — prises connectées
 app.use('/api/tapo',     require('./routes/tapo'));
 

@@ -16,6 +16,10 @@ const TAB_RENDERERS = {
 let currentTab = 'dashboard';
 
 function switchTab(tab) {
+  // Stopper le polling Moonraker si on quitte l'onglet Imprimantes
+  if (currentTab === 'printers' && tab !== 'printers') {
+    if (typeof mrStopAll === 'function') mrStopAll();
+  }
   currentTab = tab;
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.tab === tab);

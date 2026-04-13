@@ -20,10 +20,20 @@ function renderPrinterCards() {
   if (allPrinters.some(function(p) { return p.tapo_ip; })) {
     startTapoPolling();
   }
+  // Démarrer le polling Moonraker si au moins une imprimante Klipper/Fluidd
+  const mrPrinters = allPrinters.filter(function(p) {
+    return ['moonraker','fluidd','mainsail','klipper'].includes(
+      (p.interface_type || '').toLowerCase());
+  });
+  if (mrPrinters.length) {
+    mrStartPolling(mrPrinters);
+  }
 }
 
 function printerCard(p) {
   const successRate = p.total_prints > 0 ? Math.round((p.total_success / p.total_prints) * 100) : 0;
+  const isMoonraker = ['moonraker','fluidd','mainsail','klipper'].includes(
+    (p.interface_type || '').toLowerCase());
   return `
   <div class="printer-card ${p.status === 'printing' ? 'printing' : ''}">
     <div class="printer-card-header">
@@ -42,6 +52,27 @@ function printerCard(p) {
       <div class="job-name">Impression en cours</div>
       <div class="progress-wrap" style="margin-top:6px"><div class="progress-fill" style="width:${p.progress||0}%"></div></div>
       <div class="job-pct" style="margin-top:4px">${p.progress||0}%</div>
+    </div>` : ''}
+
+    ${isMoonraker ? `
+    <div id="moonraker-card-${p.id}" style="display:none;background:var(--bg3);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:4px">
+        <span id="mr-state-${p.id}" style="font-size:11px;font-weight:600"></span>
+        <span id="mr-file-${p.id}" style="font-size:11px;color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      </div>
+      <div id="mr-progress-wrap-${p.id}" style="display:none;margin-bottom:6px">
+        <div style="background:var(--border2);border-radius:3px;height:5px;overflow:hidden">
+          <div id="mr-progress-bar-${p.id}" style="height:100%;background:var(--accent);transition:width 0.8s;width:0%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:11px;color:var(--text3)">
+          <span id="mr-pct-${p.id}">0%</span>
+          <span id="mr-remain-${p.id}"></span>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;font-size:12px">
+        <span>🌡 <span id="mr-ext-${p.id}" style="font-weight:500">—</span></span>
+        <span>🛏 <span id="mr-bed-${p.id}" style="font-weight:500">—</span></span>
+      </div>
     </div>` : ''}
 
     <div class="printer-stats-mini">
@@ -796,4 +827,114 @@ async function assignTapoPrise(printerId, mac, alias) {
   } catch(e) {
     if (result) result.innerHTML = '<span style="color:var(--danger)">✗ ' + e.message + '</span>';
   }
+}
+
+// ── Moonraker — Polling temps réel ───────────────────────────────────────
+
+const _mrIntervals = {}; // { printerId: intervalId }
+
+const MR_STATE_LABELS = {
+  standby:  { label: 'En veille',   color: 'var(--text3)' },
+  printing: { label: '🖨 En cours',  color: 'var(--accent)' },
+  paused:   { label: '⏸ En pause',  color: '#f59e0b' },
+  complete: { label: '✓ Terminé',   color: '#10b981' },
+  error:    { label: '⚠ Erreur',    color: 'var(--danger)' },
+};
+
+function fmtRemaining(minutes) {
+  if (minutes === null || minutes === undefined) return '';
+  if (minutes < 1) return '< 1 min';
+  if (minutes < 60) return minutes + ' min';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h + 'h' + (m > 0 ? String(m).padStart(2,'0') : '00');
+}
+
+async function mrPollOne(printerId) {
+  try {
+    const data = await API.get('/moonraker/' + printerId + '/status');
+
+    const card     = document.getElementById('moonraker-card-' + printerId);
+    const elState  = document.getElementById('mr-state-'    + printerId);
+    const elFile   = document.getElementById('mr-file-'     + printerId);
+    const elBar    = document.getElementById('mr-progress-bar-' + printerId);
+    const elPct    = document.getElementById('mr-pct-'      + printerId);
+    const elRemain = document.getElementById('mr-remain-'   + printerId);
+    const elExt    = document.getElementById('mr-ext-'      + printerId);
+    const elBed    = document.getElementById('mr-bed-'      + printerId);
+    const elWrap   = document.getElementById('mr-progress-wrap-' + printerId);
+
+    if (!card) return;
+
+    if (!data.available) {
+      card.style.display = 'none';
+      return;
+    }
+
+    // Toujours afficher le bloc
+    card.style.display = 'block';
+
+    // État
+    const stateInfo = MR_STATE_LABELS[data.state] || { label: data.state, color: 'var(--text3)' };
+    if (elState) {
+      elState.textContent = stateInfo.label;
+      elState.style.color = stateInfo.color;
+    }
+
+    // Fichier
+    if (elFile) {
+      const fname = data.filename ? data.filename.replace(/\.gcode$/i, '') : '';
+      elFile.textContent = fname;
+      elFile.title = fname;
+    }
+
+    // Progression — afficher seulement si en cours ou en pause
+    const showProgress = data.state === 'printing' || data.state === 'paused';
+    if (elWrap) elWrap.style.display = showProgress ? 'block' : 'none';
+    if (showProgress) {
+      if (elBar)    elBar.style.width   = data.progress + '%';
+      if (elPct)    elPct.textContent   = data.progress + '%';
+      if (elRemain) elRemain.textContent = data.remaining !== null
+        ? 'Restant : ' + fmtRemaining(data.remaining) : '';
+    }
+
+    // Températures — toujours
+    if (elExt) {
+      const ext = data.extruder;
+      elExt.textContent = ext.temp + '° / ' + ext.target + '°';
+      elExt.style.color = ext.target > 0 ? 'var(--accent)' : 'var(--text3)';
+    }
+    if (elBed) {
+      const bed = data.bed;
+      elBed.textContent = bed.temp + '° / ' + bed.target + '°';
+      elBed.style.color = bed.target > 0 ? '#f59e0b' : 'var(--text3)';
+    }
+  } catch(_) {
+    // Ignorer les erreurs réseau silencieusement
+  }
+}
+
+function mrStartPolling(printers) {
+  // Stopper tous les anciens intervals
+  mrStopAll();
+
+  printers.forEach(function(p) {
+    const isMoonraker = ['moonraker','fluidd','mainsail','klipper'].includes(
+      (p.interface_type || '').toLowerCase());
+    if (!isMoonraker) return;
+
+    // Premier appel immédiat
+    mrPollOne(p.id);
+    // Polling toutes les 10 secondes
+    _mrIntervals[p.id] = setInterval(function() {
+      mrPollOne(p.id);
+    }, 10000);
+  });
+}
+
+function mrStopAll() {
+  Object.keys(_mrIntervals).forEach(function(id) {
+    clearInterval(_mrIntervals[id]);
+    delete _mrIntervals[id];
+  });
 }
