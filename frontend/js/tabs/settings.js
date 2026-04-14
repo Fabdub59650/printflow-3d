@@ -151,6 +151,19 @@ async function renderSettings() {
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
           <div>
+            <div style="font-size:13px">Galerie photos</div>
+            <div style="font-size:11px;color:var(--text3)">Affiche l'onglet Galerie avec toutes les photos d'impressions</div>
+          </div>
+          <div onclick="toggleSetting('gallery_enabled', this)" id="toggle-gallery-enabled"
+               data-enabled="${settings.gallery_enabled!=='false'?'1':'0'}"
+               style="width:40px;height:22px;border-radius:11px;cursor:pointer;transition:background 0.2s;
+                      background:${settings.gallery_enabled!=='false'?'var(--accent)':'var(--border2)'};position:relative;flex-shrink:0">
+            <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;
+                        top:2px;transition:left 0.2s;left:${settings.gallery_enabled!=='false'?'19px':'2px'}"></div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+          <div>
             <div style="font-size:13px">Alertes stock filament</div>
             <div style="font-size:11px;color:var(--text3)">Affiche un avertissement sur le dashboard quand une bobine est presque vide</div>
           </div>
@@ -421,7 +434,9 @@ async function renderSettings() {
     </div>
 
     <!-- ── Vider des données ──────────────────────── -->
-    <div id="purge-section-placeholder"></div>`;
+    <div id="purge-section-placeholder"></div>
+    <!-- ── Purge par date ────────────────────────── -->
+    <div id="purge-date-placeholder"></div>`;
 
       loadBackupStatus();
       API.get('/library/stats').then(function(stats) {
@@ -435,6 +450,7 @@ async function renderSettings() {
           '</div>';
       }).catch(function() {});
       renderPurgeSection();
+      renderPurgeDateSection();
       break;
 
     case 'integrations':
@@ -778,6 +794,11 @@ function toggleSetting(key, el) {
     if (navQ) navQ.style.display = enabled ? '' : 'none';
     if (!enabled && currentTab === 'quotes') switchTab('dashboard');
   }
+  if (key === 'gallery_enabled') {
+    var navG = document.getElementById('nav-gallery');
+    if (navG) navG.style.display = enabled ? '' : 'none';
+    if (!enabled && currentTab === 'gallery') switchTab('dashboard');
+  }
 }
 
 // ── Toggle Spoolman ───────────────────────────────────────
@@ -855,6 +876,7 @@ async function saveSettings() {
     show_locations:        togLocs     ? String(togLocs.dataset.enabled     === '1') : 'true',
     projects_enabled:      togProjects ? String(togProjects.dataset.enabled === '1') : 'true',
     quotes_enabled:        togQuotes   ? String(togQuotes.dataset.enabled   === '1') : 'true',
+    gallery_enabled:       document.getElementById('toggle-gallery-enabled')?.dataset.enabled === '1' ? 'true' : 'false',
     stock_alert_enabled:        document.getElementById('toggle-stock-alert')?.dataset.enabled === '1' ? 'true' : 'false',
     stock_alert_threshold:      document.getElementById('set-stock-threshold')?.value || '20',
     maintenance_alert_enabled:  document.getElementById('toggle-maintenance-alert')?.dataset.enabled === '1' ? 'true' : 'false',
@@ -873,6 +895,8 @@ async function saveSettings() {
     // Appliquer la visibilité des onglets
     const navQuotes = document.getElementById('nav-quotes');
     if (navQuotes) navQuotes.style.display = body.quotes_enabled === 'true' ? '' : 'none';
+    const navGallery = document.getElementById('nav-gallery');
+    if (navGallery) navGallery.style.display = body.gallery_enabled === 'true' ? '' : 'none';
     checkSpoolmanStatus();
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -1542,5 +1566,152 @@ async function toggleTapoEnabled(el) {
     toast('Tapo ' + (enabled ? 'activé' : 'désactivé'), 'success');
   } catch(e) {
     toast('Erreur : ' + e.message, 'error');
+  }
+}
+
+// ── Purge par date ─────────────────────────────────────────────────────────
+
+function renderPurgeDateSection() {
+  var placeholder = document.getElementById('purge-date-placeholder');
+  if (!placeholder) return;
+
+  var card = document.createElement('div');
+  card.className = 'card';
+  card.style.marginTop = '16px';
+  card.style.border = '1px solid rgba(239,68,68,0.2)';
+
+  // Date par défaut : début de l'année courante
+  var defaultDate = new Date();
+  defaultDate.setMonth(0); defaultDate.setDate(1);
+  var defaultDateStr = defaultDate.toISOString().slice(0, 10);
+
+  var items = [
+    { id:'pbd-prints',      table:'prints',      label:'\uD83D\uDDA8 Impressions'  },
+    { id:'pbd-maintenance', table:'maintenance',  label:'\uD83D\uDD27 Maintenances' },
+    { id:'pbd-quotes',      table:'quotes',       label:'\uD83D\uDCC4 Devis'        },
+    { id:'pbd-audit',       table:'audit_log',    label:'\uD83D\uDCDC Historique'   },
+  ];
+
+  card.innerHTML =
+    '<div class="card-header">' +
+      '<span class="card-title" style="color:var(--danger)">\uD83D\uDCC5 Purge par date</span>' +
+    '</div>' +
+    '<p style="font-size:13px;color:var(--text2);margin-bottom:14px">' +
+      'Supprime d\u00E9finitivement les donn\u00E9es ant\u00E9rieures \u00E0 la date choisie. ' +
+      '<strong style="color:var(--danger)">Action irr\u00E9versible.</strong>' +
+    '</p>' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">' +
+      '<label style="font-size:13px;font-weight:500">Supprimer les donn\u00E9es ant\u00E9rieures au :</label>' +
+      '<input type="date" id="pbd-date" value="' + defaultDateStr + '"' +
+        ' onchange="loadPurgeDateStats()" style="font-size:13px">' +
+      '<button class="btn btn-sm" onclick="loadPurgeDateStats()">Calculer</button>' +
+    '</div>' +
+    '<div id="pbd-items" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">' +
+      items.map(function(item) {
+        return '<label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;' +
+          'padding:10px 12px;background:var(--bg3);border-radius:var(--radius)">' +
+          '<input type="checkbox" id="' + item.id + '" data-table="' + item.table + '"' +
+            ' onchange="updatePurgeDateBtn()" style="flex-shrink:0;width:16px;height:16px">' +
+          '<span style="flex:1">' + item.label + '</span>' +
+          '<span id="' + item.id + '-cnt" style="font-size:11px;color:var(--text3)">—</span>' +
+        '</label>';
+      }).join('') +
+    '</div>' +
+    '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);' +
+      'border-radius:var(--radius);padding:12px;margin-bottom:12px">' +
+      '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px">' +
+        '<input type="checkbox" id="pbd-confirm" onchange="updatePurgeDateBtn()" ' +
+          'style="margin-top:2px;flex-shrink:0;width:16px;height:16px">' +
+        '<span style="color:var(--danger)">Je comprends que cette action est ' +
+          '<strong>d\u00E9finitive et irr\u00E9versible</strong>. ' +
+          'Les donn\u00E9es supprim\u00E9es ne pourront pas \u00EAtre r\u00E9cup\u00E9r\u00E9es.</span>' +
+      '</label>' +
+    '</div>' +
+    '<button class="btn btn-danger" id="btn-purge-date" onclick="executePurgeByDate()" ' +
+      'disabled style="opacity:0.5">\uD83D\uDDD1 Purger les donn\u00E9es s\u00E9lectionn\u00E9es</button>' +
+    '<div id="pbd-status" style="margin-top:10px;font-size:13px"></div>';
+
+  placeholder.replaceWith(card);
+}
+
+async function loadPurgeDateStats() {
+  const dateVal = document.getElementById('pbd-date')?.value;
+  if (!dateVal) return;
+
+  const tables = ['prints', 'maintenance', 'quotes', 'audit_log'];
+  const ids    = ['pbd-prints', 'pbd-maintenance', 'pbd-quotes', 'pbd-audit'];
+
+  try {
+    const stats = await API.post('/settings/purge-by-date-stats', {
+      before_date: dateVal,
+      tables,
+    });
+    ids.forEach(function(id, i) {
+      const el = document.getElementById(id + '-cnt');
+      const n  = stats[tables[i]] || 0;
+      if (el) el.textContent = n + ' entr\u00E9e' + (n !== 1 ? 's' : '');
+    });
+  } catch(e) { toast('Erreur : ' + e.message, 'error'); }
+}
+
+function updatePurgeDateBtn() {
+  const confirmed = document.getElementById('pbd-confirm')?.checked;
+  const anyChecked = ['pbd-prints','pbd-maintenance','pbd-quotes','pbd-audit']
+    .some(function(id) { return document.getElementById(id)?.checked; });
+  const btn = document.getElementById('btn-purge-date');
+  if (btn) {
+    btn.disabled = !(confirmed && anyChecked);
+    btn.style.opacity = (confirmed && anyChecked) ? '1' : '0.5';
+  }
+}
+
+async function executePurgeByDate() {
+  const dateVal = document.getElementById('pbd-date')?.value;
+  if (!dateVal) return toast('Date requise', 'error');
+
+  const tableMap = {
+    'pbd-prints':      'prints',
+    'pbd-maintenance': 'maintenance',
+    'pbd-quotes':      'quotes',
+    'pbd-audit':       'audit_log',
+  };
+  const tables = Object.entries(tableMap)
+    .filter(function([id]) { return document.getElementById(id)?.checked; })
+    .map(function([, table]) { return table; });
+
+  if (!tables.length) return toast('Sélectionnez au moins une catégorie', 'error');
+
+  try {
+    const btn = document.getElementById('btn-purge-date');
+    if (btn) { btn.disabled = true; btn.textContent = 'Suppression…'; }
+
+    const result = await API.post('/settings/purge-by-date', {
+      before_date: dateVal,
+      tables,
+      confirm: true,
+    });
+
+    const status = document.getElementById('pbd-status');
+    const total  = Object.values(result.deleted || {}).reduce(function(s, n) { return s + n; }, 0);
+    const dateFmt = new Date(dateVal).toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' });
+    if (status) status.innerHTML =
+      '<span style="color:var(--success)">\u2713 ' + total + ' entr\u00E9e' + (total !== 1 ? 's' : '') +
+      ' supprim\u00E9e' + (total !== 1 ? 's' : '') + ' (avant le ' + dateFmt + ')</span>';
+
+    toast('\u2713 Purge effectu\u00E9e — ' + total + ' entr\u00E9es supprim\u00E9es', 'success');
+
+    // Réinitialiser
+    document.getElementById('pbd-confirm').checked = false;
+    ['pbd-prints','pbd-maintenance','pbd-quotes','pbd-audit'].forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.checked = false;
+      const cnt = document.getElementById(id + '-cnt');
+      if (cnt) cnt.textContent = '—';
+    });
+    updatePurgeDateBtn();
+  } catch(e) {
+    toast('Erreur : ' + e.message, 'error');
+    const btn = document.getElementById('btn-purge-date');
+    if (btn) { btn.disabled = false; btn.textContent = '\uD83D\uDDD1 Purger les donn\u00E9es s\u00E9lectionn\u00E9es'; }
   }
 }

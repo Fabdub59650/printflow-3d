@@ -208,6 +208,146 @@ router.get('/consumption', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/stats/consumption-history — courbe mensuelle/trimestrielle sur 12 mois
+router.get('/consumption-history', async (req, res) => {
+  try {
+    const mode = req.query.mode || 'month'; // 'month' ou 'quarter'
+
+    // Consommation totale par mois sur 12 mois glissants
+    const [byMonth] = await db.query(`
+      SELECT
+        DATE_FORMAT(src.created_at, '%Y-%m')          AS period,
+        DATE_FORMAT(src.created_at, '%b %Y')           AS label,
+        ROUND(SUM(src.used_g), 0)                      AS total_g,
+        COUNT(DISTINCT src.print_id)                   AS print_count,
+        f.material
+      FROM (
+        SELECT pf.filament_id, pf.print_id, pf.quantity_actual AS used_g, p.created_at
+        FROM print_filaments pf JOIN prints p ON p.id = pf.print_id
+        WHERE p.created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+          AND pf.quantity_actual IS NOT NULL AND pf.quantity_actual > 0
+          AND p.status = 'done'
+        UNION ALL
+        SELECT p.filament_id, p.id, p.filament_used, p.created_at
+        FROM prints p
+        WHERE p.created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+          AND p.filament_used IS NOT NULL AND p.filament_used > 0
+          AND p.filament_id IS NOT NULL AND p.status = 'done'
+          AND NOT EXISTS (SELECT 1 FROM print_filaments pf2 WHERE pf2.print_id = p.id)
+      ) src
+      JOIN filaments f ON f.id = src.filament_id
+      GROUP BY period, label, f.material
+      ORDER BY period ASC
+    `);
+
+    // Regrouper par trimestre si demandé
+    let periods = [];
+    if (mode === 'quarter') {
+      const quarters = {};
+      byMonth.forEach(function(row) {
+        const d = new Date(row.period + '-01');
+        const q = 'T' + (Math.floor(d.getMonth() / 3) + 1) + ' ' + d.getFullYear();
+        if (!quarters[q]) quarters[q] = {};
+        if (!quarters[q][row.material]) quarters[q][row.material] = { total_g: 0, print_count: 0 };
+        quarters[q][row.material].total_g    += parseFloat(row.total_g  || 0);
+        quarters[q][row.material].print_count += parseInt(row.print_count || 0);
+      });
+      periods = Object.entries(quarters).map(function([label, mats]) {
+        return { label, materials: mats };
+      });
+    } else {
+      // Grouper par mois
+      const months = {};
+      byMonth.forEach(function(row) {
+        if (!months[row.period]) months[row.period] = { label: row.label, materials: {} };
+        months[row.period].materials[row.material] = {
+          total_g:     parseFloat(row.total_g    || 0),
+          print_count: parseInt(row.print_count  || 0),
+        };
+      });
+      periods = Object.values(months);
+    }
+
+    // Liste des matières distinctes
+    const materials = [...new Set(byMonth.map(function(r) { return r.material; }))];
+
+    res.json({ periods, materials, mode });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/stats/activity-history — courbe d'activité par mois/trimestre sur 12 mois
+router.get('/activity-history', async (req, res) => {
+  try {
+    const mode = req.query.mode || 'month';
+
+    // Agrégats par mois sur 12 mois glissants
+    const [byMonth] = await db.query(`
+      SELECT
+        DATE_FORMAT(p.created_at, '%Y-%m')                      AS period,
+        DATE_FORMAT(p.created_at, '%b %Y')                       AS label,
+        COUNT(*)                                                 AS total,
+        SUM(p.status = 'done')                                   AS success,
+        SUM(p.status = 'failed')                                 AS failed,
+        SUM(p.status = 'cancelled')                              AS cancelled,
+        ROUND(SUM(COALESCE(p.actual_duration,0)) / 60, 1)        AS hours,
+        pr.name                                                  AS printer_name
+      FROM prints p
+      LEFT JOIN printers pr ON pr.id = p.printer_id
+      WHERE p.created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+        AND p.status IN ('done','failed','cancelled')
+      GROUP BY period, label, pr.name
+      ORDER BY period ASC
+    `);
+
+    // Agrégats par imprimante (pour ventilation)
+    const printers = [...new Set(byMonth.map(r => r.printer_name).filter(Boolean))];
+
+    // Regrouper par période
+    function buildPeriods(rows, isQuarter) {
+      const map = {};
+      rows.forEach(function(r) {
+        let key, label;
+        if (isQuarter) {
+          const d = new Date(r.period + '-01');
+          key   = 'T' + (Math.floor(d.getMonth() / 3) + 1) + ' ' + d.getFullYear();
+          label = key;
+        } else {
+          key   = r.period;
+          label = r.label;
+        }
+        if (!map[key]) map[key] = { label, total:0, success:0, failed:0, cancelled:0, hours:0, byPrinter:{} };
+        map[key].total     += parseInt(r.total     || 0);
+        map[key].success   += parseInt(r.success   || 0);
+        map[key].failed    += parseInt(r.failed    || 0);
+        map[key].cancelled += parseInt(r.cancelled || 0);
+        map[key].hours     += parseFloat(r.hours   || 0);
+        if (r.printer_name) {
+          if (!map[key].byPrinter[r.printer_name]) map[key].byPrinter[r.printer_name] = 0;
+          map[key].byPrinter[r.printer_name] += parseInt(r.total || 0);
+        }
+      });
+      return Object.values(map).map(function(p) {
+        p.rate  = p.total > 0 ? Math.round(p.success / p.total * 100) : 0;
+        p.hours = Math.round(p.hours * 10) / 10;
+        return p;
+      });
+    }
+
+    const periods = buildPeriods(byMonth, mode === 'quarter');
+
+    // Métriques globales
+    const total12   = periods.reduce(function(s, p) { return s + p.total;   }, 0);
+    const success12 = periods.reduce(function(s, p) { return s + p.success; }, 0);
+    const hours12   = Math.round(periods.reduce(function(s, p) { return s + p.hours; }, 0) * 10) / 10;
+    const rate12    = total12 > 0 ? Math.round(success12 / total12 * 100) : 0;
+    const bestPeriod = periods.reduce(function(best, p) {
+      return p.total > (best?.total || 0) ? p : best;
+    }, null);
+
+    res.json({ periods, printers, mode, meta: { total12, success12, hours12, rate12, bestPeriod } });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/stats/maintenance-alerts — maintenances à venir
 router.get('/maintenance-alerts', async (req, res) => {
   try {

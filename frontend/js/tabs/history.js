@@ -5,12 +5,14 @@ async function renderHistory() {
   document.getElementById('page-title').textContent = 'Historique';
   document.getElementById('topbar-actions').innerHTML =
     '<select id="hist-entity" onchange="renderHistory()" style="font-size:12px;margin-right:8px">' +
-      '<option value="">Toutes les entités</option>' +
-      '<option value="filament">Filaments</option>' +
-      '<option value="print">Impressions</option>' +
-      '<option value="printer">Imprimantes</option>' +
-      '<option value="project">Projets</option>' +
-      '<option value="library_object">Bibliothèque</option>' +
+      '<option value="">🗂 Toutes les entités</option>' +
+      '<option value="filament">🧵 Filaments</option>' +
+      '<option value="print">🖨 Impressions</option>' +
+      '<option value="printer">⚙️ Imprimantes</option>' +
+      '<option value="project">📁 Projets</option>' +
+      '<option value="quote">📄 Devis</option>' +
+      '<option value="maintenance">🔧 Maintenance</option>' +
+      '<option value="library_object">📚 Bibliothèque</option>' +
       '<option value="nfc">📡 NFC</option>' +
     '</select>' +
     '<button class="btn btn-sm" onclick="renderHistory()">↺ Actualiser</button>';
@@ -50,6 +52,8 @@ async function renderHistory() {
     delete:    { bg: '#ef444422', color: '#ef4444' },
     archive:   { bg: '#88888822', color: '#888888' },
     nfc_write: { bg: '#f59e0b22', color: '#f59e0b' },
+    accepted:  { bg: '#10b98122', color: '#10b981' },
+    refused:   { bg: '#ef444422', color: '#ef4444' },
   };
 
   const ACTION_LABELS = {
@@ -58,6 +62,8 @@ async function renderHistory() {
     delete:    'Supprimé',
     archive:   'Archivé',
     nfc_write: 'NFC écrit',
+    accepted:  'Accepté',
+    refused:   'Refusé',
   };
 
   const ENTITY_LABELS = {
@@ -67,6 +73,8 @@ async function renderHistory() {
     project:        '📁 Projet',
     library_object: '📚 Bibliothèque',
     nfc:            '📡 NFC',
+    quote:          '📄 Devis',
+    maintenance:    '🔧 Maintenance',
   };
 
   content.innerHTML =

@@ -112,6 +112,7 @@ function renderPrintsTable() {
         '<td><div class="td-actions">' +
           '<button class="btn btn-sm" onclick="openPrintDetail(' + p.id + ')">Détail</button>' +
           '<button class="btn btn-sm" onclick="openPrintForm(' + p.id + ')">✏</button>' +
+          '<button class="btn btn-sm" title="Dupliquer" onclick="duplicatePrint(' + p.id + ')">⎘</button>' +
           '<button class="btn btn-sm btn-danger" onclick="deletePrint(' + p.id + ')">✕</button>' +
         '</div></td>' +
       '</tr>';
@@ -207,13 +208,14 @@ async function openPrintDetail(id) {
     '<div class="modal-footer">' +
       '<button class="btn" onclick="closeModal()">Fermer</button>' +
       '<button class="btn" onclick="exportPrintPDF(' + p.id + ')">↓ PDF</button>' +
+      '<button class="btn" onclick="closeModal();duplicatePrint(' + p.id + ')">⎘ Dupliquer</button>' +
       '<button class="btn btn-primary" onclick="closeModal();openPrintForm(' + p.id + ')">Modifier</button>' +
     '</div>',
     p.name
   );
 }
 
-async function openPrintForm(id = null, prefillProjectId = null, defaultStatus = null) {
+async function openPrintForm(id = null, prefillProjectId = null, defaultStatus = null, isDuplicate = false) {
   const [printers, filaments, projects, libraryObjects] = await Promise.all([
     API.get('/printers'),
     API.get('/filaments'),
@@ -222,6 +224,11 @@ async function openPrintForm(id = null, prefillProjectId = null, defaultStatus =
   ]);
   const p = id ? allPrints.find(x => x.id === id) || await API.get('/prints/' + id) : {};
   if (!id && defaultStatus) p.status = defaultStatus;
+  // Appliquer les données source si duplication
+  if (isDuplicate && window._duplicateSource) {
+    Object.assign(p, window._duplicateSource);
+    window._duplicateSource = null;
+  }
   const selectedProject = prefillProjectId || p.project_id || '';
   const selectedObject  = p.library_object_id || '';
 
@@ -311,8 +318,8 @@ async function openPrintForm(id = null, prefillProjectId = null, defaultStatus =
         </div>
         <div id="prf-planned-at-wrap" style="display:${(p.status==='planned')?'block':'none'}">
           <label class="form-label">Date planifiée</label>
-          <input id="prf-planned-at" type="datetime-local"
-            value="${p.planned_at ? new Date(p.planned_at).toISOString().slice(0,16) : ''}">
+          <input id="prf-planned-at" type="date"
+            value="${p.planned_at ? new Date(p.planned_at).toISOString().slice(0,10) : ''}">
         </div>
       </div>
       <!-- Ligne 2 : Progression + Durées -->
@@ -428,8 +435,41 @@ async function savePrint(id) {
     else await API.post('/prints', body);
     closeModal();
     toast(id ? 'Impression mise à jour' : 'Impression ajoutée', 'success');
-    renderPrints();
+    // Revenir sur le bon onglet selon d'où on vient
+    if (currentTab === 'schedule') renderSchedule();
+    else if (currentTab === 'gallery') renderGallery();
+    else renderPrints();
   } catch (e) { toast(e.message, 'error'); }
+}
+
+async function duplicatePrint(id) {
+  try {
+    const src = allPrints.find(function(p) { return p.id === id; })
+              || await API.get('/prints/' + id);
+
+    // Ouvrir le formulaire pré-rempli avec les données source
+    // On passe l'objet source via une variable temporaire
+    window._duplicateSource = {
+      name:               src.name + ' (copie)',
+      printer_id:         src.printer_id,
+      filament_id:        src.filament_id,
+      file_name:          src.file_name,
+      estimated_duration: src.estimated_duration,
+      layer_height:       src.layer_height,
+      infill_percent:     src.infill_percent,
+      print_temp:         src.print_temp,
+      bed_temp:           src.bed_temp,
+      notes:              src.notes,
+      project_id:         src.project_id,
+      library_object_id:  src.library_object_id,
+      library_file_id:    src.library_file_id,
+      // Statut remis à queued, dates effacées
+      status:             'queued',
+      planned_at:         null,
+    };
+
+    await openPrintForm(null, null, null, true);
+  } catch(e) { toast('Erreur duplication : ' + e.message, 'error'); }
 }
 
 async function deletePrint(id) {
@@ -437,7 +477,9 @@ async function deletePrint(id) {
     try {
       await API.del('/prints/' + id);
       toast('Impression supprimée');
-      renderPrints();
+      if (currentTab === 'schedule') renderSchedule();
+      else if (currentTab === 'gallery') renderGallery();
+      else renderPrints();
     } catch (e) { toast(e.message, 'error'); }
   });
 }
@@ -785,14 +827,13 @@ async function ratePrint(printId, rating) {
 function togglePlannedAt(status) {
   var wrap = document.getElementById('prf-planned-at-wrap');
   if (wrap) wrap.style.display = status === 'planned' ? 'block' : 'none';
-  // Pré-remplir demain 8h si vide
+  // Pré-remplir demain si vide
   if (status === 'planned') {
     var input = document.getElementById('prf-planned-at');
     if (input && !input.value) {
       var d = new Date();
       d.setDate(d.getDate() + 1);
-      d.setHours(8, 0, 0, 0);
-      input.value = d.toISOString().slice(0, 16);
+      input.value = d.toISOString().slice(0, 10);
     }
   }
 }

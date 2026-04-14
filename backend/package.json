@@ -1,7 +1,7 @@
 {
   "name": "printflow",
-  "version": "2.1.0",
-  "description": "PrintFlow — Gestion impressions 3D",
+  "version": "2.2.0",
+  "description": "PrintFlow \u2014 Gestion impressions 3D",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

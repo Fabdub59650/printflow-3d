@@ -147,6 +147,40 @@ async function collectReportData() {
     SELECT COUNT(*) AS new_objects FROM library_objects WHERE created_at >= ?
   `, [sinceStr]);
 
+  // ── Devis de la semaine ──────────────────────────────────────────────────
+  const [[quotesStats]] = await db.query(`
+    SELECT COUNT(*) AS total,
+           SUM(status='accepted') AS accepted,
+           SUM(status='sent')     AS sent,
+           SUM(status='refused')  AS refused,
+           ROUND(SUM(total_ht),2) AS total_ht,
+           ROUND(SUM(CASE WHEN status='accepted' THEN total_ht ELSE 0 END),2) AS accepted_ht
+    FROM quotes WHERE created_at >= ?
+  `, [sinceStr]);
+
+  const [recentQuotes] = await db.query(`
+    SELECT client_name, description, total_ht, status, created_at
+    FROM quotes WHERE created_at >= ?
+    ORDER BY created_at DESC LIMIT 5
+  `, [sinceStr]);
+
+  // ── Planning de la semaine à venir ───────────────────────────────────────
+  const nextWeek = new Date(now);
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  const nextWeekStr = nextWeek.toISOString().slice(0, 19).replace('T', ' ');
+  const nowStr = now.toISOString().slice(0, 19).replace('T', ' ');
+
+  const [upcomingPrints] = await db.query(`
+    SELECT p.name, p.planned_at, p.estimated_duration,
+           pr.name AS printer_name, f.name AS filament_name
+    FROM prints p
+    LEFT JOIN printers pr ON pr.id = p.printer_id
+    LEFT JOIN filaments f  ON f.id  = p.filament_id
+    WHERE p.status = 'planned'
+      AND p.planned_at >= ? AND p.planned_at <= ?
+    ORDER BY p.planned_at ASC LIMIT 10
+  `, [nowStr, nextWeekStr]);
+
   return {
     period: { from: since, to: now },
     activity,
@@ -156,6 +190,9 @@ async function collectReportData() {
     lowStock,
     consumableAlerts,
     newLibraryObjects: libStats?.new_objects || 0,
+    quotesStats,
+    recentQuotes,
+    upcomingPrints,
   };
 }
 
@@ -278,6 +315,80 @@ function buildReportHtml(data, appName) {
   <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
     <h2 style="margin:0 0 8px;font-size:16px;color:#1f2937;font-weight:600">📚 Bibliothèque</h2>
     <p style="margin:0;font-size:14px;color:#374151">${data.newLibraryObjects} nouvel objet${data.newLibraryObjects>1?'s':''} ajouté${data.newLibraryObjects>1?'s':''} cette semaine.</p>
+  </td></tr>` : ''}
+
+  <!-- Devis -->
+  ${(data.quotesStats?.total > 0) ? `
+  <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
+    <h2 style="margin:0 0 16px;font-size:16px;color:#1f2937;font-weight:600">📄 Devis de la semaine</h2>
+    <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="text-align:center;background:#f0fdf4;border-radius:10px;padding:14px;width:25%">
+        <div style="font-size:24px;font-weight:700;color:#1f2937">${data.quotesStats.total||0}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:4px">Créés</div>
+      </td>
+      <td style="width:10px"></td>
+      <td style="text-align:center;background:#f0fdf4;border-radius:10px;padding:14px;width:25%">
+        <div style="font-size:24px;font-weight:700;color:#10b981">${data.quotesStats.accepted||0}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:4px">Acceptés</div>
+      </td>
+      <td style="width:10px"></td>
+      <td style="text-align:center;background:#f0fdf4;border-radius:10px;padding:14px;width:25%">
+        <div style="font-size:24px;font-weight:700;color:#3b82f6">${data.quotesStats.sent||0}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:4px">Envoyés</div>
+      </td>
+      <td style="width:10px"></td>
+      <td style="text-align:center;background:#f0fdf4;border-radius:10px;padding:14px;width:25%">
+        <div style="font-size:24px;font-weight:700;color:#10b981">${data.quotesStats.accepted_ht ? parseFloat(data.quotesStats.accepted_ht).toFixed(2)+'€' : '—'}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:4px">CA accepté</div>
+      </td>
+    </tr>
+    </table>
+    ${data.recentQuotes?.length ? `
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:14px">
+      <thead><tr style="background:#f9fafb">
+        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:500">Client</th>
+        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:500">Description</th>
+        <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;font-weight:500">Total HT</th>
+        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#6b7280;font-weight:500">Statut</th>
+      </tr></thead>
+      <tbody>${(data.recentQuotes||[]).map(function(q) {
+        const statusColors = { draft:'#6b7280', sent:'#3b82f6', accepted:'#10b981', refused:'#ef4444' };
+        const statusLabels = { draft:'Brouillon', sent:'Envoyé', accepted:'Accepté', refused:'Refusé' };
+        return '<tr style="border-top:1px solid #f3f4f6">' +
+          '<td style="padding:7px 10px;font-size:13px;font-weight:500">' + q.client_name + '</td>' +
+          '<td style="padding:7px 10px;font-size:12px;color:#6b7280">' + (q.description||'—').substring(0,40) + '</td>' +
+          '<td style="padding:7px 10px;font-size:13px;text-align:right;font-weight:600">' + parseFloat(q.total_ht||0).toFixed(2) + ' €</td>' +
+          '<td style="padding:7px 10px;text-align:center"><span style="font-size:11px;color:' + (statusColors[q.status]||'#6b7280') + ';font-weight:500">' + (statusLabels[q.status]||q.status) + '</span></td>' +
+        '</tr>';
+      }).join('')}</tbody>
+    </table>` : ''}
+  </td></tr>` : ''}
+
+  <!-- Planning semaine à venir -->
+  ${(data.upcomingPrints?.length > 0) ? `
+  <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
+    <h2 style="margin:0 0 12px;font-size:16px;color:#1f2937;font-weight:600">📅 Planning — 7 prochains jours</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+      <thead><tr style="background:#f9fafb">
+        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:500">Impression</th>
+        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:500">Date planifiée</th>
+        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:500">Imprimante</th>
+        <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;font-weight:500">Durée est.</th>
+      </tr></thead>
+      <tbody>${(data.upcomingPrints||[]).map(function(p) {
+        const d = p.planned_at ? new Date(p.planned_at).toLocaleString('fr-FR', {
+          weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
+        }) : '—';
+        const dur = p.estimated_duration ? Math.round(p.estimated_duration/60*10)/10 + 'h' : '—';
+        return '<tr style="border-top:1px solid #f3f4f6">' +
+          '<td style="padding:7px 10px;font-size:13px;font-weight:500">' + p.name + '</td>' +
+          '<td style="padding:7px 10px;font-size:12px;color:#3b82f6">' + d + '</td>' +
+          '<td style="padding:7px 10px;font-size:12px;color:#6b7280">' + (p.printer_name||'—') + '</td>' +
+          '<td style="padding:7px 10px;font-size:12px;text-align:right">' + dur + '</td>' +
+        '</tr>';
+      }).join('')}</tbody>
+    </table>
   </td></tr>` : ''}
 
   <!-- Footer -->

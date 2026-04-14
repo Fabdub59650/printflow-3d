@@ -1,12 +1,21 @@
 async function renderStats() {
   document.getElementById('page-title').textContent = 'Statistiques';
   document.getElementById('topbar-actions').innerHTML = `
-    <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
-      <button class="filter-btn active" data-view="global"      onclick="switchStatsView('global',this)">Global</button>
-      <button class="filter-btn"        data-view="filaments"   onclick="switchStatsView('filaments',this)">Filaments</button>
-      <button class="filter-btn"        data-view="prints"      onclick="switchStatsView('prints',this)">Impressions</button>
-      <button class="filter-btn"        data-view="consumption" onclick="switchStatsView('consumption',this)">Consommation</button>
-      <button class="filter-btn"        data-view="costs"       onclick="switchStatsView('costs',this)">Coûts</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+        <button class="filter-btn active" data-view="global"      onclick="switchStatsView('global',this)">Global</button>
+        <button class="filter-btn"        data-view="activity"    onclick="switchStatsView('activity',this)">Activité</button>
+        <button class="filter-btn"        data-view="filaments"   onclick="switchStatsView('filaments',this)">Filaments</button>
+        <button class="filter-btn"        data-view="prints"      onclick="switchStatsView('prints',this)">Impressions</button>
+        <button class="filter-btn"        data-view="consumption" onclick="switchStatsView('consumption',this)">Consommation</button>
+        <button class="filter-btn"        data-view="history"     onclick="switchStatsView('history',this)">Historique</button>
+        <button class="filter-btn"        data-view="costs"       onclick="switchStatsView('costs',this)">Coûts</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="exportCSV('prints')"   title="Exporter les impressions en CSV">⬇ Impressions</button>
+        <button class="btn btn-sm" onclick="exportCSV('filaments')" title="Exporter les filaments en CSV">⬇ Filaments</button>
+        <button class="btn btn-sm" onclick="exportCSV('stats')"    title="Exporter les stats en CSV">⬇ Stats</button>
+      </div>
     </div>`;
   document.getElementById('content').innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 
@@ -27,9 +36,11 @@ function switchStatsView(view, btn) {
   document.querySelectorAll('.filter-btn[data-view]').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   if (view === 'global')      renderStatsGlobal();
+  if (view === 'activity')    renderStatsActivity();
   if (view === 'filaments')   renderStatsFilaments();
   if (view === 'prints')      renderStatsPrints();
   if (view === 'consumption') renderStatsConsumption();
+  if (view === 'history')     renderStatsHistory();
   if (view === 'costs')       renderStatsCosts();
 }
 
@@ -639,4 +650,353 @@ async function saveKwhPrice() {
     closeModal();
     renderStatsCosts();
   } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Historique consommation filament par mois/trimestre ───────────────────
+
+let _historyMode    = 'month';
+let _historyChart   = null;
+
+async function renderStatsHistory() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
+
+  let data;
+  try { data = await API.get('/stats/consumption-history?mode=' + _historyMode); }
+  catch(e) { content.innerHTML = '<div style="color:var(--danger)">Erreur : ' + e.message + '</div>'; return; }
+
+  const { periods, materials } = data;
+  const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+
+  // Calculer les totaux globaux
+  let grandTotal = 0;
+  let maxPeriod  = { label: '—', total: 0 };
+  periods.forEach(function(p) {
+    const total = Object.values(p.materials).reduce(function(s, m) { return s + m.total_g; }, 0);
+    grandTotal += total;
+    if (total > maxPeriod.total) maxPeriod = { label: p.label, total: total };
+  });
+  const avgPerPeriod = periods.length ? Math.round(grandTotal / periods.length) : 0;
+
+  // Sélecteur mois/trimestre
+  const modeBtn = function(mode, label) {
+    return '<button onclick="setHistoryMode(\'' + mode + '\')" style="padding:4px 14px;font-size:12px;' +
+      'border-radius:var(--radius);border:0.5px solid var(--border2);cursor:pointer;' +
+      'background:' + (_historyMode === mode ? 'var(--accent)' : 'var(--bg3)') + ';' +
+      'color:' + (_historyMode === mode ? '#fff' : 'var(--text2)') + '">' + label + '</button>';
+  };
+
+  let html = '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center">' +
+    '<span style="font-size:12px;color:var(--text3)">Affichage :</span>' +
+    modeBtn('month',   'Par mois') +
+    modeBtn('quarter', 'Par trimestre') +
+    '</div>';
+
+  // Métriques
+  html += '<div class="metrics-grid" style="margin-bottom:16px">';
+  html += '<div class="metric-card"><div class="metric-label">Total 12 mois</div>' +
+    '<div class="metric-value">' + Math.round(grandTotal / 1000) + '<span style="font-size:14px;color:var(--text2)">kg</span></div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Moyenne / ' + (_historyMode === 'quarter' ? 'trimestre' : 'mois') + '</div>' +
+    '<div class="metric-value">' + avgPerPeriod + '<span style="font-size:14px;color:var(--text2)">g</span></div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Pic de consommation</div>' +
+    '<div class="metric-value" style="font-size:16px">' + maxPeriod.label + '</div>' +
+    '<div class="metric-sub">' + Math.round(maxPeriod.total) + 'g</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Matières distinctes</div>' +
+    '<div class="metric-value">' + materials.length + '</div></div>';
+  html += '</div>';
+
+  // Graphique principal
+  html += '<div class="card" style="margin-bottom:16px">' +
+    '<div class="card-header"><span class="card-title">Consommation filament — ' +
+    (_historyMode === 'quarter' ? '4 derniers trimestres' : '12 derniers mois') + '</span></div>' +
+    '<div style="position:relative;height:280px"><canvas id="chart-history-main"></canvas></div>' +
+    '</div>';
+
+  // Tableau récapitulatif
+  if (periods.length) {
+    html += '<div class="card"><div class="card-header"><span class="card-title">Détail par période</span></div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+      '<thead><tr style="background:var(--bg3)">' +
+      '<th style="padding:8px 12px;text-align:left;font-weight:500;color:var(--text3)">Période</th>' +
+      materials.map(function(m, i) {
+        return '<th style="padding:8px 12px;text-align:right;font-weight:500;color:' + COLORS[i%COLORS.length] + '">' + m + '</th>';
+      }).join('') +
+      '<th style="padding:8px 12px;text-align:right;font-weight:500;color:var(--text3)">Total</th>' +
+      '</tr></thead><tbody>' +
+      periods.map(function(p, pi) {
+        const rowTotal = Object.values(p.materials).reduce(function(s, m) { return s + m.total_g; }, 0);
+        return '<tr style="border-top:0.5px solid var(--border)">' +
+          '<td style="padding:8px 12px;font-weight:500">' + p.label + '</td>' +
+          materials.map(function(m) {
+            const val = p.materials[m] ? Math.round(p.materials[m].total_g) : 0;
+            return '<td style="padding:8px 12px;text-align:right;color:var(--text2)">' + (val ? val + 'g' : '—') + '</td>';
+          }).join('') +
+          '<td style="padding:8px 12px;text-align:right;font-weight:600">' + Math.round(rowTotal) + 'g</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table></div></div>';
+  } else {
+    html += '<div class="card" style="text-align:center;padding:32px;color:var(--text3)">Aucune donnée sur cette période.</div>';
+  }
+
+  content.innerHTML = html;
+
+  // Créer le chart après rendu DOM
+  setTimeout(function() {
+    const ctx = document.getElementById('chart-history-main');
+    if (!ctx || typeof Chart === 'undefined' || !periods.length) return;
+    if (_historyChart) { _historyChart.destroy(); _historyChart = null; }
+
+    const labels   = periods.map(function(p) { return p.label; });
+    const datasets = materials.map(function(mat, i) {
+      return {
+        label:           mat,
+        data:            periods.map(function(p) { return Math.round(p.materials[mat]?.total_g || 0); }),
+        backgroundColor: COLORS[i % COLORS.length] + '33',
+        borderColor:     COLORS[i % COLORS.length],
+        borderWidth:     2,
+        tension:         0.3,
+        fill:            materials.length === 1,
+        pointRadius:     4,
+        pointHoverRadius: 6,
+      };
+    });
+
+    // Ajouter une courbe total
+    if (materials.length > 1) {
+      datasets.unshift({
+        label:           'Total',
+        data:            periods.map(function(p) {
+          return Math.round(Object.values(p.materials).reduce(function(s, m) { return s + m.total_g; }, 0));
+        }),
+        backgroundColor: 'transparent',
+        borderColor:     'var(--text)',
+        borderWidth:     2,
+        borderDash:      [5, 5],
+        tension:         0.3,
+        fill:            false,
+        pointRadius:     3,
+      });
+    }
+
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const gridColor  = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    const labelColor = isDark ? '#9ca3af' : '#6b7280';
+
+    _historyChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive:          true,
+        maintainAspectRatio: false,
+        interaction:         { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { color: labelColor, boxWidth: 12, padding: 16 } },
+          tooltip: {
+            callbacks: {
+              label: function(c) { return c.dataset.label + ' : ' + c.raw + 'g'; },
+            }
+          }
+        },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: labelColor } },
+          y: {
+            grid:  { color: gridColor },
+            ticks: { color: labelColor, callback: function(v) { return v + 'g'; } },
+            beginAtZero: true,
+          }
+        }
+      }
+    });
+  }, 50);
+}
+
+function setHistoryMode(mode) {
+  _historyMode = mode;
+  renderStatsHistory();
+}
+
+// ── Activité d'impression par mois/trimestre ─────────────────────────────
+
+let _activityMode  = 'month';
+let _activityChart = null;
+let _activityBarsChart = null;
+
+async function renderStatsActivity() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
+
+  let data;
+  try { data = await API.get('/stats/activity-history?mode=' + _activityMode); }
+  catch(e) { content.innerHTML = '<div style="color:var(--danger)">Erreur : ' + e.message + '</div>'; return; }
+
+  const { periods, printers, meta } = data;
+  const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+
+  const modeBtn = function(mode, label) {
+    return '<button onclick="setActivityMode(\'' + mode + '\')" style="padding:4px 14px;font-size:12px;' +
+      'border-radius:var(--radius);border:0.5px solid var(--border2);cursor:pointer;' +
+      'background:' + (_activityMode === mode ? 'var(--accent)' : 'var(--bg3)') + ';' +
+      'color:' + (_activityMode === mode ? '#fff' : 'var(--text2)') + '">' + label + '</button>';
+  };
+
+  const rateColor = meta.rate12 >= 90 ? '#10b981' : meta.rate12 >= 70 ? '#f59e0b' : '#ef4444';
+
+  let html = '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center">' +
+    '<span style="font-size:12px;color:var(--text3)">Affichage :</span>' +
+    modeBtn('month', 'Par mois') + modeBtn('quarter', 'Par trimestre') + '</div>';
+
+  // Métriques
+  html += '<div class="metrics-grid" style="margin-bottom:16px">';
+  html += '<div class="metric-card"><div class="metric-label">Total 12 mois</div>' +
+    '<div class="metric-value">' + meta.total12 + '<span style="font-size:14px;color:var(--text2)"> impr.</span></div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Taux de réussite</div>' +
+    '<div class="metric-value" style="color:' + rateColor + '">' + meta.rate12 + '<span style="font-size:14px">%</span></div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Heures totales</div>' +
+    '<div class="metric-value">' + meta.hours12 + '<span style="font-size:14px;color:var(--text2)">h</span></div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Pic d\'activité</div>' +
+    '<div class="metric-value" style="font-size:16px">' + (meta.bestPeriod?.label || '—') + '</div>' +
+    '<div class="metric-sub">' + (meta.bestPeriod?.total || 0) + ' impressions</div></div>';
+  html += '</div>';
+
+  // Graphiques côte à côte
+  html += '<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">';
+
+  // Chart principal — courbes réussies/échouées
+  html += '<div class="card"><div class="card-header"><span class="card-title">Volume d\'impressions — ' +
+    (_activityMode === 'quarter' ? '4 derniers trimestres' : '12 derniers mois') + '</span></div>' +
+    '<div style="position:relative;height:260px"><canvas id="chart-activity-main"></canvas></div></div>';
+
+  // Chart barres — heures
+  html += '<div class="card"><div class="card-header"><span class="card-title">Heures d\'impression</span></div>' +
+    '<div style="position:relative;height:260px"><canvas id="chart-activity-hours"></canvas></div></div>';
+
+  html += '</div>';
+
+  // Tableau récapitulatif
+  if (periods.length) {
+    html += '<div class="card"><div class="card-header"><span class="card-title">Détail par période</span></div>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+      '<thead><tr style="background:var(--bg3)">' +
+      '<th style="padding:8px 12px;text-align:left;font-weight:500;color:var(--text3)">Période</th>' +
+      '<th style="padding:8px 12px;text-align:right;font-weight:500;color:var(--text3)">Total</th>' +
+      '<th style="padding:8px 12px;text-align:right;font-weight:500;color:#10b981">Réussies</th>' +
+      '<th style="padding:8px 12px;text-align:right;font-weight:500;color:#ef4444">Échouées</th>' +
+      '<th style="padding:8px 12px;text-align:right;font-weight:500;color:var(--text3)">Annulées</th>' +
+      '<th style="padding:8px 12px;text-align:right;font-weight:500;color:#3b82f6">Taux</th>' +
+      '<th style="padding:8px 12px;text-align:right;font-weight:500;color:var(--text3)">Heures</th>' +
+      '</tr></thead><tbody>' +
+      periods.map(function(p) {
+        const rateCol = p.rate >= 90 ? '#10b981' : p.rate >= 70 ? '#f59e0b' : '#ef4444';
+        return '<tr style="border-top:0.5px solid var(--border)">' +
+          '<td style="padding:8px 12px;font-weight:500">' + p.label + '</td>' +
+          '<td style="padding:8px 12px;text-align:right;font-weight:600">' + p.total + '</td>' +
+          '<td style="padding:8px 12px;text-align:right;color:#10b981">' + p.success + '</td>' +
+          '<td style="padding:8px 12px;text-align:right;color:' + (p.failed > 0 ? '#ef4444' : 'var(--text3)') + '">' + (p.failed || '—') + '</td>' +
+          '<td style="padding:8px 12px;text-align:right;color:var(--text3)">' + (p.cancelled || '—') + '</td>' +
+          '<td style="padding:8px 12px;text-align:right;font-weight:600;color:' + rateCol + '">' + p.rate + '%</td>' +
+          '<td style="padding:8px 12px;text-align:right;color:var(--text2)">' + p.hours + 'h</td>' +
+          '</tr>';
+      }).join('') +
+      '</tbody></table></div></div>';
+  } else {
+    html += '<div class="card" style="text-align:center;padding:32px;color:var(--text3)">Aucune donnée sur cette période.</div>';
+  }
+
+  content.innerHTML = html;
+
+  // Créer les charts
+  setTimeout(function() {
+    if (!periods.length || typeof Chart === 'undefined') return;
+
+    const labels    = periods.map(function(p) { return p.label; });
+    const isDark    = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const gridColor  = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    const labelColor = isDark ? '#9ca3af' : '#6b7280';
+
+    const baseOpts = {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { color: labelColor, boxWidth: 12, padding: 14 } } },
+      scales: {
+        x: { grid: { color: gridColor }, ticks: { color: labelColor } },
+        y: { grid: { color: gridColor }, ticks: { color: labelColor }, beginAtZero: true }
+      }
+    };
+
+    // Chart principal : réussies + échouées + total
+    const ctxMain = document.getElementById('chart-activity-main');
+    if (ctxMain) {
+      if (_activityChart) { _activityChart.destroy(); _activityChart = null; }
+      _activityChart = new Chart(ctxMain, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Total',
+              data:  periods.map(function(p) { return p.total; }),
+              borderColor: '#6366f1', backgroundColor: 'transparent',
+              borderWidth: 2, borderDash: [5,4], tension: 0.3, pointRadius: 4,
+            },
+            {
+              label: 'Réussies',
+              data:  periods.map(function(p) { return p.success; }),
+              borderColor: '#10b981', backgroundColor: '#10b98120',
+              borderWidth: 2, tension: 0.3, fill: true, pointRadius: 4,
+            },
+            {
+              label: 'Échouées',
+              data:  periods.map(function(p) { return p.failed; }),
+              borderColor: '#ef4444', backgroundColor: '#ef444420',
+              borderWidth: 2, tension: 0.3, fill: true, pointRadius: 4,
+            },
+          ]
+        },
+        options: {
+          ...baseOpts,
+          plugins: {
+            ...baseOpts.plugins,
+            tooltip: { callbacks: { label: function(c) { return c.dataset.label + ' : ' + c.raw; } } }
+          },
+          scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { ...baseOpts.scales.y.ticks, color: labelColor, callback: function(v) { return v + ' impr.'; } } } }
+        }
+      });
+    }
+
+    // Chart barres : heures
+    const ctxHours = document.getElementById('chart-activity-hours');
+    if (ctxHours) {
+      if (_activityBarsChart) { _activityBarsChart.destroy(); _activityBarsChart = null; }
+      _activityBarsChart = new Chart(ctxHours, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Heures',
+            data:  periods.map(function(p) { return p.hours; }),
+            backgroundColor: '#3b82f680',
+            borderColor:     '#3b82f6',
+            borderWidth: 1,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          ...baseOpts,
+          plugins: {
+            ...baseOpts.plugins,
+            tooltip: { callbacks: { label: function(c) { return c.raw + 'h'; } } }
+          },
+          scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { ...baseOpts.scales.y.ticks, color: labelColor, callback: function(v) { return v + 'h'; } } } }
+        }
+      });
+    }
+  }, 50);
+}
+
+function setActivityMode(mode) {
+  _activityMode = mode;
+  renderStatsActivity();
 }

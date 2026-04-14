@@ -18,8 +18,18 @@ async function renderSchedule() {
   document.getElementById('content').innerHTML =
     '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 
-  const allPrints = await API.get('/prints?limit=500');
-  const planned   = allPrints.filter(function(p) {
+  const [allPrints, bobineAlerts] = await Promise.all([
+    API.get('/prints?limit=500'),
+    API.get('/alerts/bobines').catch(function() { return []; }),
+  ]);
+
+  // Indexer les alertes par print_id pour accès rapide
+  window._schedBobineAlerts = {};
+  (bobineAlerts || []).forEach(function(a) {
+    window._schedBobineAlerts[a.print_id] = a;
+  });
+
+  const planned = allPrints.filter(function(p) {
     return p.status === 'planned' || p.status === 'printing' || p.status === 'paused';
   });
 
@@ -61,10 +71,19 @@ function renderScheduleList(prints) {
 
 function schedPrintCard(p) {
   const overdue     = isOverdueSched(p);
+  const bobineAlert = window._schedBobineAlerts && window._schedBobineAlerts[p.id];
   const borderColor = overdue ? 'var(--danger)' :
+    bobineAlert ? (bobineAlert.severity === 'critical' ? '#ef4444' : '#f59e0b') :
     (p.status === 'printing' || p.status === 'paused') ? '#f59e0b' : 'var(--border)';
   const filamentDot = p.color_hex
     ? '<span style="width:8px;height:8px;border-radius:50%;background:' + p.color_hex + ';display:inline-block;flex-shrink:0"></span>'
+    : '';
+  const bobineBadge = bobineAlert
+    ? '<span style="font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500;' +
+      'background:' + (bobineAlert.severity === 'critical' ? '#fef2f2' : '#fef3c7') + ';' +
+      'color:' + (bobineAlert.severity === 'critical' ? '#ef4444' : '#f59e0b') + '">' +
+      (bobineAlert.severity === 'critical' ? '🔴 Stock insuffisant' : '🟡 Stock limite') +
+      ' (' + bobineAlert.stock_remaining + 'g / ' + bobineAlert.estimated_g + 'g nécessaires)</span>'
     : '';
 
   return '<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;' +
@@ -75,6 +94,7 @@ function schedPrintCard(p) {
         '<span style="font-size:14px;font-weight:500">' + p.name + '</span>' +
         statusBadge(p.status) +
         (overdue ? '<span style="font-size:11px;color:var(--danger);font-weight:500">⚠ En retard</span>' : '') +
+        bobineBadge +
       '</div>' +
       '<div style="font-size:12px;color:var(--text3);display:flex;gap:14px;flex-wrap:wrap;align-items:center">' +
         (p.planned_at

@@ -11,6 +11,7 @@ const TAB_RENDERERS = {
   history:     renderHistory,
   quotes:      renderQuotes,
   schedule:    renderSchedule,
+  gallery:     renderGallery,
 };
 
 let currentTab = 'dashboard';
@@ -152,6 +153,7 @@ window._projectsEnabled        = true;  // activé par défaut
     window._maintenanceAlertEnabled = s.maintenance_alert_enabled === 'true';
     window._projectsEnabled        = s.projects_enabled    !== 'false';
     window._quotesEnabled          = s.quotes_enabled      !== 'false';
+    window._galleryEnabled         = s.gallery_enabled     !== 'false';
 
     // Appliquer la visibilité de l'onglet Devis
     const navQuotes = document.getElementById('nav-quotes');
@@ -160,6 +162,10 @@ window._projectsEnabled        = true;  // activé par défaut
     // Appliquer la visibilité de l'onglet Projets
     const navProjects = document.getElementById('nav-projects');
     if (navProjects) navProjects.style.display = window._projectsEnabled ? '' : 'none';
+
+    // Appliquer la visibilité de l'onglet Galerie
+    const navGallery = document.getElementById('nav-gallery');
+    if (navGallery) navGallery.style.display = window._galleryEnabled ? '' : 'none';
   } catch(_) {}
 
   // Auth optionnelle — ne bloque jamais le démarrage
@@ -185,3 +191,49 @@ window._projectsEnabled        = true;  // activé par défaut
   checkSpoolmanStatus();
   setInterval(checkSpoolmanStatus, 30000);
 })();
+
+// ── Export CSV ────────────────────────────────────────────────────────────
+function exportCSV(type) {
+  const labels = { prints: 'impressions', filaments: 'filaments', stats: 'stats' };
+  toast('Export ' + (labels[type]||type) + ' en cours…');
+  const a = document.createElement('a');
+  a.href = '/api/export/' + type;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ── Sidebar mobile/tablette ───────────────────────────────────────────────
+function toggleSidebar() {
+  const sidebar  = document.getElementById('sidebar');
+  const overlay  = document.getElementById('sidebar-overlay');
+  const isOpen   = sidebar.classList.contains('sidebar-open');
+  if (isOpen) closeSidebar();
+  else openSidebar();
+}
+
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('sidebar-open');
+  document.getElementById('sidebar-overlay').classList.add('visible');
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('sidebar-open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
+
+// Fermer la sidebar sur navigation (mobile)
+const _origSwitchTab = switchTab;
+window.switchTab = function(tab) {
+  if (window.innerWidth <= 768) closeSidebar();
+  _origSwitchTab(tab);
+};
+
+// Afficher/masquer le bouton hamburger selon la taille
+function updateHamburger() {
+  const btn = document.getElementById('hamburger-btn');
+  if (btn) btn.style.display = window.innerWidth <= 768 ? 'flex' : 'none';
+}
+window.addEventListener('resize', updateHamburger);
+updateHamburger();

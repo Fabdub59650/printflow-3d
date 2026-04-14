@@ -8,8 +8,8 @@ router.get('/', async (req, res) => {
     const settings = {};
     rows.forEach(r => { settings[r.key_name] = r.value; });
     // Informations de version (non stockées en base)
-    settings._version    = '2.1.0';
-    settings._build_date = '13/04/2026';
+    settings._version    = '2.2.0';
+    settings._build_date = '14/04/2026';
     res.json(settings);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -160,6 +160,92 @@ router.post('/purge', async (req, res) => {
     await db.query('SET FOREIGN_KEY_CHECKS=1').catch(() => {});
     res.status(500).json({ error: e.message });
   }
+});
+
+// POST /api/settings/purge-by-date-stats — compter les enregistrements avant une date
+router.post('/purge-by-date-stats', async (req, res) => {
+  try {
+    const { before_date, tables } = req.body;
+    if (!before_date) return res.status(400).json({ error: 'Date requise' });
+    if (!Array.isArray(tables) || !tables.length) return res.json({});
+
+    const DATE_COLS = {
+      prints:      'created_at',
+      maintenance: 'performed_at',
+      quotes:      'created_at',
+      audit_log:   'created_at',
+    };
+
+    const counts = {};
+    for (const table of tables) {
+      const col = DATE_COLS[table];
+      if (!col) { counts[table] = 0; continue; }
+      try {
+        const [[row]] = await db.query(
+          'SELECT COUNT(*) AS n FROM ' + table + ' WHERE ' + col + ' < ?',
+          [before_date]
+        );
+        counts[table] = row.n;
+      } catch(_) { counts[table] = 0; }
+    }
+    res.json(counts);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/settings/purge-by-date — supprimer les données antérieures à une date
+router.post('/purge-by-date', async (req, res) => {
+  try {
+    const { before_date, tables, confirm } = req.body;
+    if (!confirm)      return res.status(400).json({ error: 'Confirmation requise' });
+    if (!before_date)  return res.status(400).json({ error: 'Date requise' });
+    if (!Array.isArray(tables) || !tables.length)
+      return res.status(400).json({ error: 'Aucune table sélectionnée' });
+
+    const ALLOWED_DATE = ['prints', 'maintenance', 'quotes', 'audit_log'];
+    const invalid = tables.filter(function(t) { return !ALLOWED_DATE.includes(t); });
+    if (invalid.length) return res.status(400).json({ error: 'Table non autorisée : ' + invalid.join(', ') });
+
+    const DATE_COLS = {
+      prints:      'created_at',
+      maintenance: 'performed_at',
+      quotes:      'created_at',
+      audit_log:   'created_at',
+    };
+
+    const deleted = {};
+    const fs   = require('fs');
+
+    for (const table of tables) {
+      const col = DATE_COLS[table];
+      if (!col) continue;
+
+      // Supprimer les photos des impressions concernées
+      if (table === 'prints') {
+        try {
+          const [prints] = await db.query(
+            'SELECT photo_path FROM prints WHERE photo_path IS NOT NULL AND created_at < ?',
+            [before_date]
+          );
+          for (const p of prints) {
+            try { fs.unlinkSync(p.photo_path); } catch(_) {}
+          }
+          // Supprimer aussi les print_filaments associés
+          await db.query(
+            'DELETE pf FROM print_filaments pf JOIN prints p ON p.id = pf.print_id WHERE p.created_at < ?',
+            [before_date]
+          );
+        } catch(_) {}
+      }
+
+      const [result] = await db.query(
+        'DELETE FROM ' + table + ' WHERE ' + col + ' < ?',
+        [before_date]
+      );
+      deleted[table] = result.affectedRows;
+    }
+
+    res.json({ ok: true, deleted });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

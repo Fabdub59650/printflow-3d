@@ -60,6 +60,15 @@ app.use('/api/library',     require('./routes/library'));
 // Consommables imprimantes
 app.use('/api/consumables', require('./routes/consumables'));
 
+// Recherche globale
+app.use('/api/search', require('./routes/search'));
+
+// Export CSV
+app.use('/api/export', require('./routes/export'));
+
+// Alertes bobines
+app.use('/api/alerts', require('./routes/alerts'));
+
 // Moonraker — suivi temps réel imprimantes Klipper
 app.use('/api/moonraker', require('./routes/moonraker'));
 

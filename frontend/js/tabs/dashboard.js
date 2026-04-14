@@ -4,7 +4,7 @@ async function renderDashboard() {
   const content = document.getElementById('content');
   content.innerHTML = '<div style="color:var(--text3);padding:40px 0 0 4px">Chargement…</div>';
 
-  const [stats, prints, printers, projects, alerts, consumption, maintAlerts, consumableAlerts] = await Promise.all([
+  const [stats, prints, printers, projects, alerts, consumption, maintAlerts, consumableAlerts, bobineAlerts] = await Promise.all([
     API.get('/stats'),
     API.get('/prints?limit=8'),
     API.get('/printers'),
@@ -13,6 +13,7 @@ async function renderDashboard() {
     API.get('/stats/consumption?days=30').catch(()=>null),
     (window._maintenanceAlertEnabled === true) ? API.get('/stats/maintenance-alerts').catch(()=>[]) : Promise.resolve([]),
     API.get('/consumables/alerts').catch(()=>[]),
+    API.get('/alerts/bobines').catch(()=>[]),
   ]);
 
   const s = stats.totals;
@@ -106,7 +107,52 @@ async function renderDashboard() {
     }
   } catch(_) {}
 
-  content.innerHTML = alertHtml + maintAlertHtml + consumableHtml + `
+  // ── Alertes bobines insuffisantes ────────────────────────────────────────
+  let bobineHtml = '';
+  try {
+    if (Array.isArray(bobineAlerts) && bobineAlerts.length > 0) {
+      bobineHtml = '<div class="card" style="border-left:3px solid #f59e0b;margin-bottom:16px">' +
+        '<div class="card-header">' +
+          '<span class="card-title" style="color:#f59e0b">🧵 Stock insuffisant pour ' + bobineAlerts.length + ' impression' + (bobineAlerts.length > 1 ? 's' : '') + ' planifiée' + (bobineAlerts.length > 1 ? 's' : '') + '</span>' +
+          '<a href="#" class="btn btn-sm" onclick="switchTab(\'schedule\')">Voir le planning</a>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:10px">' +
+        bobineAlerts.map(function(a) {
+          const col       = a.severity === 'critical' ? '#ef4444' : '#f59e0b';
+          const icon      = a.severity === 'critical' ? '🔴' : '🟡';
+          const dateStr   = a.planned_at
+            ? new Date(a.planned_at).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+            : 'Sans date';
+          const sourceHint = a.estimated_from === 'history'
+            ? '<span style="font-size:10px;color:var(--text3)"> (estimé : ' + a.avg_rate + 'g/h)</span>'
+            : '';
+          return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+            '<span style="font-size:15px">' + icon + '</span>' +
+            '<div style="flex:1;min-width:180px">' +
+              '<div style="font-size:13px;font-weight:500">' + a.print_name + '</div>' +
+              '<div style="font-size:11px;color:var(--text3)">📅 ' + dateStr +
+                (a.printer_name ? ' · 🖨 ' + a.printer_name : '') + '</div>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:6px">' +
+              '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + (a.color_hex||'#ccc') + '"></span>' +
+              '<span style="font-size:12px;color:var(--text2)">' + a.filament_name + '</span>' +
+            '</div>' +
+            '<div style="text-align:right;white-space:nowrap">' +
+              '<div style="font-size:12px;color:' + col + ';font-weight:600">' +
+                'Besoin : ' + a.estimated_g + 'g' + sourceHint +
+              '</div>' +
+              '<div style="font-size:11px;color:var(--text3)">Stock : ' + a.stock_remaining + 'g' +
+                (a.stock_after < 0 ? ' <span style="color:#ef4444">(−' + Math.abs(a.stock_after) + 'g)</span>' : '') +
+              '</div>' +
+            '</div>' +
+            '<button class="btn btn-sm" onclick="switchTab(\'filaments\')" title="Voir les filaments">Changer bobine</button>' +
+          '</div>';
+        }).join('') +
+        '</div></div>';
+    }
+  } catch(_) {}
+
+  content.innerHTML = alertHtml + maintAlertHtml + consumableHtml + bobineHtml + `
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-label">Imprimantes actives</div>

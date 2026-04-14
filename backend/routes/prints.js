@@ -167,7 +167,7 @@ router.post('/', async (req, res) => {
       [name,printer_id,filament_id,file_name,status||'queued',estimated_duration,
        filament_used,layer_height,infill_percent,print_temp,bed_temp,notes,started_at,
        project_id||null,project_item_name||null,library_object_id||null,library_file_id||null,
-       planned_at||null]
+       planned_at ? planned_at.replace('T',' ').replace('Z','').slice(0,19) : null]
     );
     if (printer_id && status === 'printing') {
       await db.query('UPDATE printers SET status=? WHERE id=?', ['printing', printer_id]);
@@ -264,7 +264,7 @@ router.put('/:id', async (req, res) => {
        project_id||null,project_item_name||null,
        'library_object_id' in req.body ? (req.body.library_object_id||null) : prev.library_object_id,
        'library_file_id' in req.body ? (req.body.library_file_id||null) : prev.library_file_id,
-       planned_at !== undefined ? planned_at||null : prev.planned_at,
+       planned_at !== undefined ? (planned_at ? planned_at.replace('T',' ').replace('Z','').slice(0,19) : null) : prev.planned_at,
        req.params.id]
     );
 

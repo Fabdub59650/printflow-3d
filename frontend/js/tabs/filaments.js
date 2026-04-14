@@ -290,24 +290,26 @@ function renderFilamentGrid() {
 function openFilamentForm(id = null) {
   const f = id ? allFilaments.find(x => x.id === id) : {};
   openModal(`
-    <div class="form-grid">
-      <div class="form-group full"><label class="form-label">Nom *</label><input id="ff-name" value="${f.name||''}"></div>
-      <div class="form-group"><label class="form-label">Marque</label><input id="ff-brand" value="${f.brand||''}"></div>
-      <div class="form-group"><label class="form-label">N° de bobine</label>
-        <input id="ff-spool-num" value="${f.spool_number||''}" placeholder="ex: SN-20260401-001">
-      </div>
-      <div class="form-group"><label class="form-label">Matière</label>
+    <!-- Section 1 : Identité -->
+    <div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Identification</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div><label class="form-label">Nom *</label><input id="ff-name" value="${f.name||''}"></div>
+      <div><label class="form-label">Marque</label><input id="ff-brand" value="${f.brand||''}"></div>
+      <div><label class="form-label">N° de bobine</label><input id="ff-spool-num" value="${f.spool_number||''}" placeholder="ex: SN-001"></div>
+    </div>
+
+    <!-- Section 2 : Matière & couleur -->
+    <div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Matière & couleur</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div><label class="form-label">Matière</label>
         <select id="ff-mat">
           ${['PLA','PETG','ABS','ASA','TPU','Nylon','PC','HIPS','PVA','autre'].map(m =>
             `<option ${(f.material||'PLA')==m?'selected':''}>${m}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group">
-        <label class="form-label">Sous-type ELEGOO
-          <span style="font-size:10px;color:var(--text3);font-weight:400"> (pour NFC)</span>
-        </label>
+      <div><label class="form-label">Sous-type ELEGOO</label>
         <select id="ff-elegoo-subtype">
-          <option value="">Standard (aucun)</option>
+          <option value="">Standard</option>
           <optgroup label="Renforcé">
             ${['CF','GF','PLA-CF','PETG-CF','ABS-CF','PA-CF','PETG-GF','PA-GF'].map(s =>
               `<option value="${s}" ${(f.elegoo_subtype||'')==s?'selected':''}>${s}</option>`).join('')}
@@ -322,40 +324,60 @@ function openFilamentForm(id = null) {
           </optgroup>
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Finition</label>
+      <div><label class="form-label">Finition</label>
         <select id="ff-finish">
           ${FINISH_OPTIONS.map(o => `<option ${(f.finish_option||'Standard')==o?'selected':''}>${o}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Propriété spéciale</label>
+      <div><label class="form-label">Propriété spéciale</label>
         <select id="ff-special">
           ${SPECIAL_OPTIONS.map(o => `<option ${(f.special_option||'—')==o?'selected':''}>${o}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Couleur</label>
-        <input id="ff-color" type="color" value="${f.color_hex||'#cccccc'}">
+      <div><label class="form-label">Couleur</label>
+        <input id="ff-color" type="color" value="${f.color_hex||'#cccccc'}" style="height:36px;width:100%;padding:2px 4px">
       </div>
-      <div class="form-group"><label class="form-label">Nom couleur</label><input id="ff-colorname" value="${f.color_name||''}"></div>
-      <div class="form-group"><label class="form-label">Diamètre (mm)</label>
+      <div><label class="form-label">Nom couleur</label><input id="ff-colorname" value="${f.color_name||''}"></div>
+      <div><label class="form-label">Diamètre (mm)</label>
         <select id="ff-diam">
           <option ${(f.diameter||1.75)==1.75?'selected':''}>1.75</option>
           <option ${(f.diameter||1.75)==2.85?'selected':''}>2.85</option>
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Poids total (g)</label><input id="ff-wtot" type="number" value="${f.weight_total||1000}"></div>
-      <div class="form-group"><label class="form-label">Poids restant (g)</label><input id="ff-wrem" type="number" value="${f.weight_remaining||1000}"></div>
-      <div class="form-group"><label class="form-label">Poids bobine vide (g)</label>
-        <input id="ff-spool" type="number" step="0.1" value="${f.spool_weight||''}" placeholder="ex: 230">
-      </div>
-      <div class="form-group"><label class="form-label">Temp buse min (°C)</label><input id="ff-tnmin" type="number" value="${f.temp_nozzle_min||190}"></div>
-      <div class="form-group"><label class="form-label">Temp buse max (°C)</label><input id="ff-tnmax" type="number" value="${f.temp_nozzle_max||230}"></div>
-      <div class="form-group"><label class="form-label">Temp plateau min (°C)</label><input id="ff-tbmin" type="number" value="${f.temp_bed_min||0}"></div>
-      <div class="form-group"><label class="form-label">Temp plateau max (°C)</label><input id="ff-tbmax" type="number" value="${f.temp_bed_max||60}"></div>
-      ${window._showPrices ? `<div class="form-group"><label class="form-label">Prix (€)</label><input id="ff-price" type="number" step="0.01" value="${f.price||''}"></div>` : ''}
-      ${window._spoolmanEnabled ? `<div class="form-group"><label class="form-label">ID Spoolman</label><input id="ff-spoolman" type="number" value="${f.spoolman_id||''}"></div>` : '<div></div>'}
-      ${window._showLocations ? `<div class="form-group"><label class="form-label">Emplacement</label><input id="ff-loc" value="${f.location||''}"></div>` : ''}
-      <div class="form-group full"><label class="form-label">Notes</label><textarea id="ff-notes">${f.notes||''}</textarea></div>
-      <div class="form-group full">
+      <div></div>
+    </div>
+
+    <!-- Section 3 : Stock & prix -->
+    <div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Stock</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr ${window._showPrices ? '1fr' : ''};gap:10px;margin-bottom:14px">
+      <div><label class="form-label">Poids total (g)</label><input id="ff-wtot" type="number" value="${f.weight_total||1000}"></div>
+      <div><label class="form-label">Poids restant (g)</label><input id="ff-wrem" type="number" value="${f.weight_remaining||1000}"></div>
+      <div><label class="form-label">Poids bobine vide (g)</label><input id="ff-spool" type="number" step="0.1" value="${f.spool_weight||''}" placeholder="ex: 230"></div>
+      ${window._showPrices ? `<div><label class="form-label">Prix (€/kg)</label><input id="ff-price" type="number" step="0.01" value="${f.price||''}"></div>` : ''}
+    </div>
+
+    <!-- Section 4 : Températures -->
+    <div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Températures</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div><label class="form-label">Buse min (°C)</label><input id="ff-tnmin" type="number" value="${f.temp_nozzle_min||190}"></div>
+      <div><label class="form-label">Buse max (°C)</label><input id="ff-tnmax" type="number" value="${f.temp_nozzle_max||230}"></div>
+      <div><label class="form-label">Plateau min (°C)</label><input id="ff-tbmin" type="number" value="${f.temp_bed_min||0}"></div>
+      <div><label class="form-label">Plateau max (°C)</label><input id="ff-tbmax" type="number" value="${f.temp_bed_max||60}"></div>
+    </div>
+
+    <!-- Section 5 : Autres -->
+    <div style="display:grid;grid-template-columns:${window._showLocations?'1fr 1fr':'1fr'};gap:10px;margin-bottom:14px">
+      ${window._showLocations ? `<div><label class="form-label">Emplacement</label><input id="ff-loc" value="${f.location||''}"></div>` : ''}
+      ${window._spoolmanEnabled ? `<div><label class="form-label">ID Spoolman</label><input id="ff-spoolman" type="number" value="${f.spoolman_id||''}"></div>` : ''}
+    </div>
+    <div style="margin-bottom:14px">
+      <label class="form-label">Notes</label>
+      <textarea id="ff-notes" rows="2" style="width:100%;resize:vertical">${f.notes||''}</textarea>
+    </div>
+
+    <!-- Section 6 : NFC + Statut sur une ligne -->
+    <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start">
+      <div>
         <label class="form-label">Puce NFC</label>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           ${f.nfc_uid
@@ -364,20 +386,16 @@ function openFilamentForm(id = null) {
                <button class="btn btn-sm btn-danger" onclick="nfcUnlinkFilament(${f.id||'null'});closeModal()">Délier</button>`
             : `<span style="font-size:12px;color:var(--text3)">Aucune puce liée</span>`}
           <button class="btn btn-sm" onclick="closeModal();openNfcScanModal(${f.id||'null'})">
-            📡 ${f.nfc_uid ? 'Remplacer la puce' : 'Lier une puce'}
+            📡 ${f.nfc_uid ? 'Remplacer' : 'Lier une puce'}
           </button>
-          ${f.nfc_uid ? `
-          <button class="btn btn-sm"
-            style="background:var(--accent-bg);color:var(--accent);font-weight:500"
-            onclick="closeModal();writeElegooFromFilament(${f.id})">
-            ◈ Écrire format ELEGOO
-          </button>` : ''}
-          ${f.id ? '<button class="btn btn-sm" onclick="openNfcHistory(' + f.id + ')">📋 Historique NFC</button>' : ''}
+          ${f.nfc_uid ? `<button class="btn btn-sm" style="background:var(--accent-bg);color:var(--accent);font-weight:500"
+            onclick="closeModal();writeElegooFromFilament(${f.id})">◈ Écrire ELEGOO</button>` : ''}
+          ${f.id ? `<button class="btn btn-sm" onclick="openNfcHistory(${f.id})">📋 Historique</button>` : ''}
         </div>
       </div>
-      <div class="form-group full">
-        <label class="form-label">Statut de la bobine</label>
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+      <div>
+        <label class="form-label">Statut</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px">
           <div onclick="toggleArchiveInForm(this)" id="ff-archive-toggle"
                data-archived="${f.archived?'1':'0'}"
                style="width:40px;height:22px;border-radius:11px;cursor:pointer;transition:background 0.2s;
@@ -385,17 +403,15 @@ function openFilamentForm(id = null) {
             <div style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;
                         top:2px;transition:left 0.2s;left:${f.archived?'19px':'2px'}"></div>
           </div>
-          <div>
-            <div style="font-size:13px" id="ff-archive-label">${f.archived?'Bobine archivée':'Bobine active'}</div>
-            <div style="font-size:11px;color:var(--text3)">Archiver masque la bobine de la liste principale</div>
-          </div>
+          <span style="font-size:12px" id="ff-archive-label">${f.archived?'Archivée':'Active'}</span>
         </label>
       </div>
     </div>
+
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" onclick="saveFilament(${id||'null'})">Enregistrer</button>
-    </div>`, id ? 'Modifier filament' : 'Ajouter un filament');
+    </div>`, id ? 'Modifier filament' : 'Ajouter un filament', { wide: true });
 }
 
 async function saveFilament(id) {

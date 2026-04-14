@@ -1,5 +1,5 @@
 // ── PrintFlow Service Worker v1.7.0 ──────────────────────
-const CACHE_NAME    = 'printflow-v2.1.0';
+const CACHE_NAME    = 'printflow-v2.2.0';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
