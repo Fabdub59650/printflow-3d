@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 echo "========================================"
-echo "  PrintFlow v1.0.0 — Installation Raspberry Pi"
+echo "  PrintFlow v2.2.0 — Installation Raspberry Pi"
 echo "========================================"
 echo "  Dossier projet : ${PROJECT_DIR}"
 echo ""
@@ -177,7 +177,7 @@ if systemctl is-active --quiet printflow; then
   IP=$(hostname -I | awk '{print $1}')
   echo ""
   echo "========================================"
-  echo "  ✅ PrintFlow v1.0.0 installé avec succès !"
+  echo "  ✅ PrintFlow v2.2.0 installé avec succès !"
   echo "========================================"
   echo ""
   echo "  Accès local      : http://localhost"

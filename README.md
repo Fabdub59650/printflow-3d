@@ -91,39 +91,22 @@
 
 ---
 
-## Installation rapide
+## Installation
+
+Un script d'installation automatique est fourni pour Raspberry Pi OS (Debian 12+) :
 
 ```bash
 # Cloner le dépôt
 git clone https://github.com/Fabdub59650/printflow-3d.git
 cd printflow-3d
 
-# Installer les dépendances
-cd backend && npm install
-
-# Créer la base de données
-sudo mariadb -e "CREATE DATABASE printflow CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-sudo mariadb printflow < sql/schema.sql
-
-# Configurer
-cp backend/.env.example backend/.env
-# Éditer backend/.env avec vos paramètres
-
-# Lancer
-node backend/server.js
+# Lancer l'installation automatique (en root)
+sudo bash scripts/install.sh
 ```
 
-Interface accessible sur `http://[IP-du-Pi]:3000`
+Le script installe automatiquement : Node.js 20, MariaDB, Nginx, les dépendances npm, crée la base de données, configure le service systemd et le reverse proxy.
 
----
-
-## Service systemd
-
-```bash
-sudo cp systemd/printflow.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now printflow
-```
+Interface accessible sur **`http://[IP-du-Pi]`** (port 80, proxifié depuis Node.js sur le port 3000 en interne).
 
 ---
 
