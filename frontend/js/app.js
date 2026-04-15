@@ -237,3 +237,120 @@ function updateHamburger() {
 }
 window.addEventListener('resize', updateHamburger);
 updateHamburger();
+
+// ── Raccourcis clavier ─────────────────────────────────────────────────────
+const KB_SHORTCUTS = [
+  { key: 'd', tab: 'dashboard',   label: 'Tableau de bord' },
+  { key: 'i', tab: 'printers',    label: 'Imprimantes' },
+  { key: 'p', tab: 'prints',      label: 'Impressions' },
+  { key: 'l', tab: 'planning',    label: 'Planning',      tabId: 'schedule' },
+  { key: 'f', tab: 'filaments',   label: 'Filaments' },
+  { key: 'r', tab: 'projects',    label: 'Projets' },
+  { key: 'b', tab: 'library',     label: 'Bibliothèque' },
+  { key: 'm', tab: 'maintenance', label: 'Maintenance' },
+  { key: 's', tab: 'stats',       label: 'Statistiques' },
+  { key: 'q', tab: 'quotes',      label: 'Devis' },
+  { key: 'g', tab: 'gallery',     label: 'Galerie' },
+  { key: 'h', tab: 'history',     label: 'Historique' },
+  { key: ',', tab: 'settings',    label: 'Paramètres' },
+];
+
+document.addEventListener('keydown', function(e) {
+  // Ignorer si focus dans un input/textarea/select ou modale ouverte
+  const tag = document.activeElement?.tagName?.toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if (document.getElementById('modal-overlay')?.style.display === 'flex') return;
+  if (document.getElementById('help-drawer')?.style.transform === 'translateX(0px)') return;
+
+  // ? → afficher la cheatsheet des raccourcis
+  if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+    toggleShortcutsHelp();
+    return;
+  }
+
+  // Pas de modifier key
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+
+  const sc = KB_SHORTCUTS.find(function(s) { return s.key === e.key; });
+  if (!sc) return;
+
+  const tabId = sc.tabId || sc.tab;
+  // Vérifier que l'onglet est visible (pas désactivé)
+  const navEl = document.querySelector('[data-tab="' + tabId + '"]');
+  if (!navEl || navEl.style.display === 'none') return;
+
+  e.preventDefault();
+  switchTab(tabId);
+
+  // Flash de confirmation discret
+  showShortcutToast(sc.key, sc.label);
+});
+
+function showShortcutToast(key, label) {
+  const existing = document.getElementById('kb-flash');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'kb-flash';
+  el.style.cssText = 'position:fixed;bottom:70px;right:24px;z-index:500;' +
+    'background:var(--bg2);border:0.5px solid var(--border2);border-radius:var(--radius);' +
+    'padding:8px 14px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;' +
+    'box-shadow:0 4px 12px rgba(0,0,0,0.15);animation:slideIn 0.15s ease;pointer-events:none';
+  el.innerHTML = '<kbd style="background:var(--bg3);border:0.5px solid var(--border2);' +
+    'border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;font-family:monospace">' +
+    key + '</kbd><span>→ ' + label + '</span>';
+  document.body.appendChild(el);
+  setTimeout(function() { if (el.parentNode) el.remove(); }, 1200);
+}
+
+// Cheatsheet des raccourcis (touche ?)
+function toggleShortcutsHelp() {
+  const existing = document.getElementById('shortcuts-panel');
+  if (existing) { existing.remove(); return; }
+
+  const panel = document.createElement('div');
+  panel.id = 'shortcuts-panel';
+  panel.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:500;' +
+    'background:var(--bg2);border:0.5px solid var(--border2);border-radius:var(--radius-lg);' +
+    'padding:16px 20px;box-shadow:0 8px 24px rgba(0,0,0,0.2);min-width:220px';
+
+  const rows = KB_SHORTCUTS.map(function(s) {
+    const navEl = document.querySelector('[data-tab="' + (s.tabId||s.tab) + '"]');
+    if (navEl && navEl.style.display === 'none') return ''; // Onglet désactivé
+    return '<div style="display:flex;align-items:center;justify-content:space-between;' +
+      'padding:4px 0;font-size:12px">' +
+      '<span style="color:var(--text2)">' + s.label + '</span>' +
+      '<kbd style="background:var(--bg3);border:0.5px solid var(--border2);' +
+      'border-radius:4px;padding:2px 8px;font-family:monospace;font-size:11px;' +
+      'font-weight:600;margin-left:16px">' + s.key + '</kbd>' +
+    '</div>';
+  }).join('');
+
+  panel.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+      '<span style="font-size:13px;font-weight:600">Raccourcis clavier</span>' +
+      '<button onclick="document.getElementById(\'shortcuts-panel\').remove()" ' +
+        'style="border:none;background:none;cursor:pointer;color:var(--text3);font-size:16px">✕</button>' +
+    '</div>' +
+    '<div style="border-bottom:0.5px solid var(--border);margin-bottom:8px;padding-bottom:8px">' +
+      rows +
+    '</div>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px">' +
+      '<span style="color:var(--text2)">Aide</span>' +
+      '<kbd style="background:var(--bg3);border:0.5px solid var(--border2);' +
+      'border-radius:4px;padding:2px 8px;font-family:monospace;font-size:11px;font-weight:600">F1</kbd>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-top:4px">' +
+      '<span style="color:var(--text2)">Recherche</span>' +
+      '<kbd style="background:var(--bg3);border:0.5px solid var(--border2);' +
+      'border-radius:4px;padding:2px 8px;font-family:monospace;font-size:11px;font-weight:600">⌘K</kbd>' +
+    '</div>' +
+    '<div style="margin-top:10px;font-size:11px;color:var(--text3);text-align:center">' +
+      'Appuyez sur <kbd style="background:var(--bg3);border:0.5px solid var(--border2);' +
+      'border-radius:3px;padding:1px 5px;font-size:10px;font-weight:600">?</kbd> pour fermer' +
+    '</div>';
+
+  document.body.appendChild(panel);
+
+  // Fermeture automatique après 5s
+  setTimeout(function() { if (panel.parentNode) panel.remove(); }, 5000);
+}

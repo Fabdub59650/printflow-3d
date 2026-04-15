@@ -97,11 +97,20 @@ router.get('/bobines', async (req, res) => {
     }
 
     // 4. Simuler la consommation cumulée par filament
+    // Pour les bobines avec un parent, on calcule le stock du groupe entier
     const stockSim = {};
-    filamentIds.forEach(function(fid) {
+    for (const fid of filamentIds) {
       const line = allLines.find(function(l) { return l.filament_id === fid; });
-      stockSim[fid] = parseFloat(line.weight_remaining || 0);
-    });
+      let stock = parseFloat(line.weight_remaining || 0);
+      try {
+        const [[grp]] = await db.query(
+          'SELECT COALESCE(SUM(weight_remaining),0) AS extra FROM filaments WHERE parent_filament_id=? AND archived=0',
+          [fid]
+        );
+        stock += parseFloat(grp.extra || 0);
+      } catch(_) {}
+      stockSim[fid] = stock;
+    }
 
     // Trier par date planifiée pour simuler dans l'ordre
     allLines.sort(function(a, b) {

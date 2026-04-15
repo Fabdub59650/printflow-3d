@@ -8,8 +8,8 @@ router.get('/', async (req, res) => {
     const settings = {};
     rows.forEach(r => { settings[r.key_name] = r.value; });
     // Informations de version (non stockées en base)
-    settings._version    = '2.2.0';
-    settings._build_date = '14/04/2026';
+    settings._version    = '2.3.0';
+    settings._build_date = '15/04/2026';
     res.json(settings);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

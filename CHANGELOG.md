@@ -1,85 +1,77 @@
 # Changelog PrintFlow-3D
 
+## [2.3.0] — 2026-04-15
+
+### Ajouté
+- **Bobines partielles** — gestion de plusieurs bobines du même filament avec suivi individuel du stock
+  - Bouton **+½** sur chaque filament pour créer une bobine partielle rattachée
+  - Section dédiée dans le formulaire filament avec sélection du parent et étiquette libre
+  - Affichage indenté (↳) dans la liste avec badge orange "Partielle · étiquette"
+  - Badge **Σ stock total** sur le parent (toutes bobines du groupe confondues)
+  - Alertes de stock calculées sur le stock cumulé du groupe entier
+  - Tri automatique : les partielles apparaissent juste après leur parent
+  - Pré-remplissage automatique matière/couleur depuis le parent à la création
+- **Raccourcis clavier** — navigation rapide entre les onglets
+  - `d` Dashboard · `i` Imprimantes · `p` Impressions · `l` Planning
+  - `f` Filaments · `r` Projets · `b` Bibliothèque · `m` Maintenance
+  - `s` Statistiques · `q` Devis · `g` Galerie · `h` Historique · `,` Paramètres
+  - `F1` Aide · `⌘K` Recherche · `?` Cheatsheet des raccourcis
+  - Flash de confirmation discret à chaque navigation
+  - Badge ⌨ sur le bouton ? pour accéder à la cheatsheet
+  - Ignorés si focus dans un champ ou modale ouverte
+- **Validation poids filament** — le poids restant ne peut pas dépasser le poids total
+  - Bordure rouge en temps réel sur le champ si invalide
+  - Blocage de la sauvegarde avec message d'erreur explicite
+- **Aide en ligne enrichie** — sections Bobines partielles et Galerie ajoutées
+
+### Corrigé
+- Comparaison de types int/string pour `parent_filament_id` (String() des deux côtés)
+- Calcul du stock total du groupe utilise `allFilaments` complet (pas la liste filtrée)
+
+---
+
 ## [2.2.0] — 2026-04-14
 
 ### Ajouté
-- **Moonraker temps réel** — suivi live des imprimantes Klipper/Fluidd (Neptune 4 Plus)
-  - Températures buse et plateau (actuelle / cible)
-  - Progression de l'impression en cours avec temps restant
-  - Polling toutes les 10 secondes, arrêt automatique hors onglet
-- **Export CSV** — Impressions, Filaments, Stats depuis l'onglet Statistiques
-- **Rapport hebdomadaire enrichi** — sections Devis et Planning à venir
+- **Moonraker temps réel** — suivi live des imprimantes Klipper/Fluidd
+- **Export CSV** — Impressions, Filaments, Stats
+- **Rapport hebdomadaire enrichi** — sections Devis et Planning
 - **Statistiques Activité** — courbe d'impressions par mois/trimestre sur 12 mois
-  - Volume total, réussies, échouées, heures
-  - Toggle Par mois / Par trimestre
-- **Statistiques Historique filament** — courbe de consommation par matière sur 12 mois
-- **Duplication d'impression** — bouton ⎘ pour copier une impression avec tous ses paramètres
-- **Recherche globale** — barre de recherche dans la topbar (⌘K / Ctrl+K)
-  - Impressions, filaments, projets, bibliothèque, devis
-  - Navigation directe vers la fiche en un clic
-- **Alertes bobines anticipées** — avertissement si stock insuffisant pour une impression planifiée
-  - Badge 🟡/🔴 sur les cartes du Planning
-  - Widget sur le tableau de bord
-  - Calcul automatique depuis l'historique de consommation (g/h)
-- **Galerie photos** — nouvel onglet avec grille de toutes les photos d'impressions
-  - Filtres par note, matière, imprimante, tri
-  - Bouton ↺ Réinitialiser les filtres
-  - Lightbox plein écran avec navigation clavier ← →
-  - Lien vers la fiche impression depuis la lightbox
-  - Activable/désactivable dans Paramètres → Interface
-- **Aide en ligne** — panneau latéral avec 15 sections contextuelles
-  - S'ouvre sur la section de l'onglet actif
-  - Recherche plein texte avec surlignage
-  - Raccourci F1
-- **Réorganisation fiche filament** — formulaire en sections compactes, plus besoin de scroller
-- **Responsive tablette** — ajustements CSS pour écrans ≤ 1024px et ≤ 768px
-  - Sidebar masquée sur mobile avec bouton hamburger ☰
-  - Grilles adaptées, modales responsives
-- **Purge par date** — nouvelle section dans Paramètres → Données
-  - Supprime les données antérieures à une date choisie
-  - Impressions, Maintenances, Devis, Historique
-  - Compteur d'entrées avant confirmation
+- **Statistiques Historique filament** — courbe de consommation par matière
+- **Duplication d'impression** — bouton ⎘
+- **Recherche globale** — barre de recherche (⌘K / Ctrl+K)
+- **Alertes bobines anticipées** — stock insuffisant pour impressions planifiées
+- **Galerie photos** — grille, filtres, lightbox, activable dans Paramètres
+- **Aide en ligne** — panneau latéral contextuel (F1), 15 sections, recherche plein texte
+- **Réorganisation fiche filament** — sections compactes sans scroll
+- **Responsive tablette** — sidebar hamburger, grilles adaptées
+- **Purge par date** — données antérieures à une date choisie
 - **Historique enrichi** — Devis et Maintenance dans l'onglet Historique
-- **Planning** — retour automatique sur le Planning après modification/suppression d'une impression
-- **Galerie** — retour automatique sur la Galerie après fermeture d'une fiche impression
-- **Champ date planifiée** — simplifié en sélecteur de date (sans heure)
+- **Retour onglet intelligent** — Planning et Galerie conservés après modification
 
 ### Corrigé
-- Colonnes SQL ambiguës dans les requêtes stats (created_at, status)
-- Format ISO datetime rejeté par MariaDB pour planned_at (T et Z supprimés côté backend)
-- Alertes bobines : prise en compte du multi-filaments (print_filaments.quantity_estimated)
-- Recherche globale : nom de fonction openFilamentForm, openObjectDetail corrigés
-- Polling Moonraker arrêté au changement d'onglet
+- Colonnes SQL ambiguës (created_at, status) dans les stats
+- Format ISO datetime pour planned_at (MariaDB)
+- Alertes bobines multi-filaments (print_filaments.quantity_estimated)
+- Noms de fonctions recherche globale (openFilamentForm, openObjectDetail)
 
 ---
 
 ## [2.1.0] — 2026-04-13
 
 ### Ajouté
-- **Devis client** — calcul coût matière + électricité + marge %, statuts, stats globales
-- **Planning d'impression** — vue filtrée sur les impressions planifiées (statut "Planifié")
-- **Toggle devis** et **toggle galerie** dans Paramètres → Interface
-- **Purge des données** — ajout Devis
-
-### Corrigé
-- Toggle devis : id `nav-quotes` manquant, variable `currentTab` mal référencée
-- Planning : table `print_schedule` supprimée, intégration directe dans `prints`
-- Bordures rouges incohérentes dans la purge des données
+- Devis client, Planning intégré, Purge par date, Toggle modules
 
 ---
 
 ## [2.0.0] — 2026-04-13
 
 ### Ajouté
-- **Intégration Tapo P100** — contrôle prises connectées par imprimante
-- **Toggle AMS**, **Favicon SVG**, **Version OS**
+- Intégration Tapo P100
 
 ---
 
 ## [1.9.0] — 2026-04-13
 
 ### Ajouté
-- Paramètres 5 onglets, multi-filaments, photo impression, versioning bibliothèque
-- Rapport hebdomadaire SMTP AES-256, thème sombre auto
-- QR Code, notation étoiles, consommables, fiabilité imprimante
-- Vider données sélectives, NFC ACR122U, format ELEGOO
+- NFC ELEGOO, rapport SMTP AES-256, thème auto, multi-filaments, photo impression

@@ -588,3 +588,27 @@ DROP TABLE IF EXISTS print_schedule;
 
 -- ── v2.1.0 — Toggle devis ────────────────────────────────────────────────
 INSERT IGNORE INTO settings (key_name, value) VALUES ('quotes_enabled', 'true');
+
+-- ── v2.2.0 — Galerie photos ──────────────────────────────────────────────
+INSERT IGNORE INTO settings (key_name, value) VALUES ('gallery_enabled', 'true');
+
+-- ── v2.3.0 — Bobines partielles ──────────────────────────────────────────
+-- Lien optionnel vers un filament "parent" (même matière/couleur)
+ALTER TABLE filaments
+  ADD COLUMN IF NOT EXISTS parent_filament_id INT DEFAULT NULL
+    COMMENT 'ID du filament parent si bobine partielle',
+  ADD COLUMN IF NOT EXISTS spool_label VARCHAR(50) DEFAULT NULL
+    COMMENT 'Étiquette libre ex: Bobine A, Reste commande mars';
+
+-- Clé étrangère (ajoutée conditionnellement)
+SET @fk_partial = (
+  SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'filaments'
+    AND CONSTRAINT_NAME = 'fk_filament_parent'
+);
+SET @sql_fk = IF(@fk_partial = 0,
+  'ALTER TABLE filaments ADD CONSTRAINT fk_filament_parent FOREIGN KEY (parent_filament_id) REFERENCES filaments(id) ON DELETE SET NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql_fk; EXECUTE stmt; DEALLOCATE PREPARE stmt;

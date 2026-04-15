@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta name="version" content="2.2.0">
+  <meta name="version" content="2.3.0">
   <meta name="theme-color" content="#3b82f6">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -143,11 +143,18 @@
       </div>
       <div id="topbar-actions"></div>
       <!-- Bouton aide -->
-      <button id="help-btn" onclick="toggleHelp()" title="Aide (F1)"
-        style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;
-               border-radius:50%;border:0.5px solid var(--border2);background:var(--bg3);
-               cursor:pointer;font-size:15px;font-weight:600;color:var(--text2);
-               flex-shrink:0;transition:background 0.15s">?</button>
+      <div style="position:relative;flex-shrink:0">
+        <button id="help-btn" onclick="toggleHelp()" title="Aide (F1)"
+          style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;
+                 border-radius:50%;border:0.5px solid var(--border2);background:var(--bg3);
+                 cursor:pointer;font-size:15px;font-weight:600;color:var(--text2);
+                 transition:background 0.15s">?</button>
+        <span onclick="toggleShortcutsHelp()" title="Raccourcis clavier (?)"
+          style="position:absolute;bottom:-4px;right:-4px;width:14px;height:14px;
+                 border-radius:50%;background:var(--accent);color:#fff;
+                 font-size:8px;font-weight:700;display:flex;align-items:center;
+                 justify-content:center;cursor:pointer;border:1.5px solid var(--bg)">⌨</span>
+      </div>
     </div>
     <div id="content"></div>
   </main>

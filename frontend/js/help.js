@@ -136,6 +136,15 @@ const HELP_SECTIONS = [
 <p>Avec un lecteur NFC ACR122U connecté au Raspberry Pi, vous pouvez lier une puce NFC à chaque bobine. Le scan d'une puce sélectionne automatiquement le filament dans le formulaire d'impression.</p>
 <p>Pour les bobines ELEGOO, le format NFC natif est supporté — les données sont lues et écrites au format ELEGOO.</p>
 
+<h4>Bobines partielles</h4>
+<p>Quand vous avez plusieurs restes de bobines du même filament, vous pouvez les regrouper sous un filament "parent" :</p>
+<ul>
+  <li>Cliquez sur le bouton <strong>+½</strong> sur la ligne d'un filament pour créer une bobine partielle rattachée</li>
+  <li>Ou dans le formulaire d'un filament, utilisez la section <strong>Bobine partielle</strong> pour le rattacher à un parent existant</li>
+  <li>Donnez une étiquette libre à chaque partielle (ex: "Reste mars", "Bobine B")</li>
+</ul>
+<p>Dans la liste, les partielles s'affichent indentées (↳) sous leur parent avec un badge orange. Le parent affiche automatiquement le <strong>Σ stock total du groupe</strong> (toutes bobines confondues). Les alertes de stock tiennent compte du stock cumulé du groupe entier.</p>
+
 <h4>Archivage</h4>
 <p>Les bobines vides ou inutilisées peuvent être archivées. Elles disparaissent de la liste principale mais restent dans les statistiques. Activez <strong>Afficher archivés</strong> pour les voir.</p>
 

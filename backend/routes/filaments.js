@@ -24,8 +24,9 @@ router.post('/', async (req, res) => {
       `INSERT INTO filaments (name,brand,material,color_name,color_hex,diameter,
         temp_nozzle_min,temp_nozzle_max,temp_bed_min,temp_bed_max,
         weight_total,weight_remaining,price,spoolman_id,location,notes,
-        finish_option,special_option,spool_weight,nfc_uid,spool_number,elegoo_subtype)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        finish_option,special_option,spool_weight,nfc_uid,spool_number,elegoo_subtype,
+        parent_filament_id,spool_label)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [req.body.name, req.body.brand, req.body.material,
        req.body.color_name, req.body.color_hex, req.body.diameter||1.75,
        req.body.temp_nozzle_min, req.body.temp_nozzle_max,
@@ -35,7 +36,8 @@ router.post('/', async (req, res) => {
        req.body.location, req.body.notes,
        req.body.finish_option||null, req.body.special_option||null,
        req.body.spool_weight||null, req.body.nfc_uid||null,
-       req.body.spool_number||null, req.body.elegoo_subtype||null]
+       req.body.spool_number||null, req.body.elegoo_subtype||null,
+       req.body.parent_filament_id||null, req.body.spool_label||null]
     );
     const [rows] = await db.query('SELECT * FROM filaments WHERE id=?', [result.insertId]);
     await logAction('filament', result.insertId, 'create', 'Filament créé : ' + rows[0].name);
@@ -48,29 +50,31 @@ router.put('/:id', async (req, res) => {
     const { name, brand, material, color_name, color_hex, diameter,
             temp_nozzle_min, temp_nozzle_max, temp_bed_min, temp_bed_max,
             weight_total, weight_remaining, price, spoolman_id, location, notes, archived,
-            finish_option, special_option, spool_weight } = req.body;
+            finish_option, special_option, spool_weight,
+            parent_filament_id, spool_label } = req.body;
 
-    // Préserver nfc_uid, spool_number et elegoo_subtype si absents du body
-    // (évite d'effacer le lien NFC lors d'une édition depuis le formulaire)
     const [[current]] = await db.query(
       'SELECT nfc_uid, spool_number, elegoo_subtype FROM filaments WHERE id=?',
       [req.params.id]
     );
-    const nfc_uid       = 'nfc_uid'       in req.body ? (req.body.nfc_uid       || null) : (current?.nfc_uid       || null);
-    const spool_number  = 'spool_number'  in req.body ? (req.body.spool_number  || null) : (current?.spool_number  || null);
-    const elegoo_subtype= 'elegoo_subtype'in req.body ? (req.body.elegoo_subtype|| null) : (current?.elegoo_subtype|| null);
+    const nfc_uid        = 'nfc_uid'        in req.body ? (req.body.nfc_uid        || null) : (current?.nfc_uid        || null);
+    const spool_number   = 'spool_number'   in req.body ? (req.body.spool_number   || null) : (current?.spool_number   || null);
+    const elegoo_subtype = 'elegoo_subtype' in req.body ? (req.body.elegoo_subtype || null) : (current?.elegoo_subtype || null);
 
     await db.query(
       `UPDATE filaments SET name=?,brand=?,material=?,color_name=?,color_hex=?,diameter=?,
         temp_nozzle_min=?,temp_nozzle_max=?,temp_bed_min=?,temp_bed_max=?,
         weight_total=?,weight_remaining=?,price=?,spoolman_id=?,location=?,notes=?,archived=?,
-        finish_option=?,special_option=?,spool_weight=?,nfc_uid=?,spool_number=?,elegoo_subtype=?
+        finish_option=?,special_option=?,spool_weight=?,nfc_uid=?,spool_number=?,elegoo_subtype=?,
+        parent_filament_id=?,spool_label=?
        WHERE id=?`,
       [name,brand,material,color_name,color_hex,diameter,
        temp_nozzle_min,temp_nozzle_max,temp_bed_min,temp_bed_max,
        weight_total,weight_remaining,price,spoolman_id,location,notes,archived||0,
        finish_option||null,special_option||null,spool_weight||null,
-       nfc_uid, spool_number, elegoo_subtype, req.params.id]
+       nfc_uid, spool_number, elegoo_subtype,
+       parent_filament_id||null, spool_label||null,
+       req.params.id]
     );
     const [rows] = await db.query('SELECT * FROM filaments WHERE id=?', [req.params.id]);
     await logAction('filament', req.params.id, 'update', 'Filament modifié : ' + rows[0].name);

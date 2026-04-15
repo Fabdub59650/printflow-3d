@@ -197,8 +197,22 @@ function renderFilamentGrid() {
   }
   // Appliquer filtre et tri
   const displayed = sortFilaments(filterFilaments(allFilaments));
+
+  // Réordonner : les bobines partielles apparaissent juste après leur parent
+  const ordered = [];
+  const parents = displayed.filter(function(f) { return !f.parent_filament_id; });
+  parents.forEach(function(p) {
+    ordered.push(p);
+    displayed.filter(function(c) { return String(c.parent_filament_id) === String(p.id); })
+             .forEach(function(c) { ordered.push(c); });
+  });
+  // Orphelines (parent archivé/supprimé) à la fin
+  displayed.filter(function(f) {
+    return f.parent_filament_id && !parents.find(function(p) { return String(p.id) === String(f.parent_filament_id); });
+  }).forEach(function(f) { ordered.push(f); });
+
   const grouped = {};
-  displayed.forEach(f => {
+  ordered.forEach(f => {
     if (!grouped[f.material]) grouped[f.material] = [];
     grouped[f.material].push(f);
   });
@@ -240,13 +254,34 @@ function renderFilamentGrid() {
               f.special_option && f.special_option !== '—' ? f.special_option : null
             ].filter(Boolean).join(' · ');
             const visCols = getVisibleCols().map(c => c.id);
+            const isPartial = !!f.parent_filament_id;
+            const partialBadge = isPartial
+              ? `<span style="font-size:10px;padding:1px 6px;background:#f59e0b22;color:#f59e0b;
+                   border-radius:10px;flex-shrink:0">Partielle${f.spool_label ? ' · '+f.spool_label : ''}</span>`
+              : '';
+            // Stock total du groupe (parent + enfants)
+            // Stock total du groupe — comparaison robuste (int vs string)
+            const children = allFilaments.filter(function(c) {
+              return String(c.parent_filament_id) === String(f.id) && !c.archived;
+            });
+            const groupStock = children.length
+              ? Math.round(parseFloat(f.weight_remaining||0) + children.reduce(function(s,c){ return s + parseFloat(c.weight_remaining||0); }, 0))
+              : null;
+            const groupBadge = groupStock !== null
+              ? `<span style="font-size:10px;padding:1px 6px;background:var(--accent-bg);color:var(--accent);
+                   border-radius:10px;flex-shrink:0" title="Stock total du groupe">
+                   Σ ${groupStock}g</span>`
+              : '';
+
             const tdNom = `<td style="opacity:${f.archived?'0.55':'1'}">
-                <div style="display:flex;align-items:center;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px;${isPartial ? 'padding-left:18px' : ''}">
+                  ${isPartial ? '<span style="color:var(--text3);font-size:14px;flex-shrink:0">↳</span>' : ''}
                   <span class="filament-dot" style="background:${f.color_hex};width:14px;height:14px"></span>
                   <span style="font-weight:500">${f.name}</span>
-
                   ${f.archived ? `<span style="font-size:10px;padding:1px 6px;background:var(--bg3);color:var(--text3);border-radius:10px">Archivé</span>` : ''}
                   ${f.nfc_uid ? `<span title="Puce NFC liée : ${f.nfc_uid}" style="font-size:10px;padding:1px 5px;background:var(--accent-bg);color:var(--accent);border-radius:10px;cursor:pointer" onclick="openNfcScanModal(${f.id})">📡 NFC</span>` : ''}
+                  ${partialBadge}
+                  ${groupBadge}
                 </div></td>`;
             const tdMap = {
               couleur:     `<td style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
@@ -274,6 +309,9 @@ function renderFilamentGrid() {
                 <button class="btn btn-sm" title="Évolution stock" onclick="openWeighingHistory(${f.id})">📈</button>
                 <button class="btn btn-sm" title="Historique pesées" onclick="openWeighingHistory(${f.id})" style="font-size:10px">Hist.</button>
                 <button class="btn btn-sm" title="NFC" onclick="openNfcScanModal(${f.id})" style="font-size:11px">📡</button>
+                ${!f.parent_filament_id ? `<button class="btn btn-sm" title="Ajouter une bobine partielle"
+                  onclick="openFilamentForm(null,${f.id})"
+                  style="font-size:10px;background:var(--accent-bg);color:var(--accent)">+½</button>` : ''}
                 <button class="btn btn-sm" title="${f.archived?'Désarchiver':'Archiver'}"
                   onclick="quickToggleArchive(${f.id},${f.archived?1:0})"
                   style="font-size:11px;opacity:${f.archived?'1':'0.6'}">${f.archived?'↑':'📦'}</button>
@@ -287,8 +325,37 @@ function renderFilamentGrid() {
     </div>`).join('');
 }
 
-function openFilamentForm(id = null) {
+function openFilamentForm(id = null, defaultParentId = null) {
   const f = id ? allFilaments.find(x => x.id === id) : {};
+  const parentId = f.parent_filament_id || defaultParentId || null;
+
+  // Filaments éligibles comme parents (non partiels, non archivés, pas soi-même)
+  const eligibleParents = allFilaments.filter(function(p) {
+    return !p.parent_filament_id && !p.archived && p.id !== id;
+  });
+
+  const parentSection = `
+    <div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Bobine partielle <span style="font-weight:400;text-transform:none;font-size:11px">(optionnel)</span></div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:14px;
+      padding:12px;background:${parentId ? 'var(--accent-bg)' : 'var(--bg3)'};border-radius:var(--radius);
+      border:0.5px solid ${parentId ? 'var(--accent)' : 'var(--border2)'}">
+      <div>
+        <label class="form-label">Rattacher à un filament parent</label>
+        <select id="ff-parent-id" onchange="onParentChange(this)">
+          <option value="">— Bobine indépendante —</option>
+          ${eligibleParents.map(p =>
+            `<option value="${p.id}" ${parentId==p.id?'selected':''}>${p.name} (${p.material} · ${Math.round(p.weight_remaining)}g restants)</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Étiquette <span style="font-size:10px;color:var(--text3)">(ex: Reste mars)</span></label>
+        <input id="ff-spool-label" value="${f.spool_label||''}" placeholder="ex: Bobine A">
+      </div>
+      ${parentId ? `<div style="grid-column:1/-1;font-size:11px;color:var(--accent)">
+        ℹ Cette bobine sera regroupée avec son parent dans la liste. Le stock total du groupe sera affiché automatiquement.
+      </div>` : ''}
+    </div>`;
   openModal(`
     <!-- Section 1 : Identité -->
     <div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Identification</div>
@@ -350,8 +417,8 @@ function openFilamentForm(id = null) {
     <!-- Section 3 : Stock & prix -->
     <div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Stock</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr ${window._showPrices ? '1fr' : ''};gap:10px;margin-bottom:14px">
-      <div><label class="form-label">Poids total (g)</label><input id="ff-wtot" type="number" value="${f.weight_total||1000}"></div>
-      <div><label class="form-label">Poids restant (g)</label><input id="ff-wrem" type="number" value="${f.weight_remaining||1000}"></div>
+      <div><label class="form-label">Poids total (g)</label><input id="ff-wtot" type="number" value="${f.weight_total||1000}" oninput="validateWeights()"></div>
+      <div><label class="form-label">Poids restant (g)</label><input id="ff-wrem" type="number" value="${f.weight_remaining||1000}" oninput="validateWeights()"></div>
       <div><label class="form-label">Poids bobine vide (g)</label><input id="ff-spool" type="number" step="0.1" value="${f.spool_weight||''}" placeholder="ex: 230"></div>
       ${window._showPrices ? `<div><label class="form-label">Prix (€/kg)</label><input id="ff-price" type="number" step="0.01" value="${f.price||''}"></div>` : ''}
     </div>
@@ -376,6 +443,7 @@ function openFilamentForm(id = null) {
     </div>
 
     <!-- Section 6 : NFC + Statut sur une ligne -->
+    ${parentSection}
     <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start">
       <div>
         <label class="form-label">Puce NFC</label>
@@ -411,35 +479,55 @@ function openFilamentForm(id = null) {
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" onclick="saveFilament(${id||'null'})">Enregistrer</button>
-    </div>`, id ? 'Modifier filament' : 'Ajouter un filament', { wide: true });
+    </div>`, id ? 'Modifier filament' : (defaultParentId ? 'Ajouter une bobine partielle' : 'Ajouter un filament'), { wide: true });
+}
+
+function validateWeights() {
+  const tot  = document.getElementById('ff-wtot');
+  const rem  = document.getElementById('ff-wrem');
+  if (!tot || !rem) return;
+  const tVal = parseFloat(tot.value) || 0;
+  const rVal = parseFloat(rem.value) || 0;
+  if (rVal > tVal) {
+    rem.style.border = '1.5px solid var(--danger)';
+    rem.title = 'Le poids restant ne peut pas dépasser le poids total';
+  } else {
+    rem.style.border = '';
+    rem.title = '';
+  }
 }
 
 async function saveFilament(id) {
   const body = {
-    name:            document.getElementById('ff-name').value,
-    brand:           document.getElementById('ff-brand').value,
-    material:        document.getElementById('ff-mat').value,
-    color_hex:       document.getElementById('ff-color').value,
-    color_name:      document.getElementById('ff-colorname').value,
-    diameter:        document.getElementById('ff-diam').value,
-    weight_total:    document.getElementById('ff-wtot').value,
-    weight_remaining:document.getElementById('ff-wrem').value,
-    spool_weight:    document.getElementById('ff-spool').value || null,
-    temp_nozzle_min: document.getElementById('ff-tnmin').value,
-    temp_nozzle_max: document.getElementById('ff-tnmax').value,
-    temp_bed_min:    document.getElementById('ff-tbmin').value,
-    temp_bed_max:    document.getElementById('ff-tbmax').value,
-    price:           document.getElementById('ff-price')?.value || null,
-    spool_number:    document.getElementById('ff-spool-num').value || null,
-    elegoo_subtype:  document.getElementById('ff-elegoo-subtype').value || null,
-    archived:        document.getElementById('ff-archive-toggle')?.dataset.archived === '1' ? 1 : 0,
-    spoolman_id:     document.getElementById('ff-spoolman')?.value || null,
-    location:        document.getElementById('ff-loc')?.value || '',
-    notes:           document.getElementById('ff-notes').value,
-    finish_option:   document.getElementById('ff-finish').value !== 'Standard' ? document.getElementById('ff-finish').value : null,
-    special_option:  document.getElementById('ff-special').value !== '—' ? document.getElementById('ff-special').value : null,
+    name:              document.getElementById('ff-name').value,
+    brand:             document.getElementById('ff-brand').value,
+    material:          document.getElementById('ff-mat').value,
+    color_hex:         document.getElementById('ff-color').value,
+    color_name:        document.getElementById('ff-colorname').value,
+    diameter:          document.getElementById('ff-diam').value,
+    weight_total:      document.getElementById('ff-wtot').value,
+    weight_remaining:  document.getElementById('ff-wrem').value,
+    spool_weight:      document.getElementById('ff-spool').value || null,
+    temp_nozzle_min:   document.getElementById('ff-tnmin').value,
+    temp_nozzle_max:   document.getElementById('ff-tnmax').value,
+    temp_bed_min:      document.getElementById('ff-tbmin').value,
+    temp_bed_max:      document.getElementById('ff-tbmax').value,
+    price:             document.getElementById('ff-price')?.value || null,
+    spool_number:      document.getElementById('ff-spool-num').value || null,
+    elegoo_subtype:    document.getElementById('ff-elegoo-subtype').value || null,
+    archived:          document.getElementById('ff-archive-toggle')?.dataset.archived === '1' ? 1 : 0,
+    spoolman_id:       document.getElementById('ff-spoolman')?.value || null,
+    location:          document.getElementById('ff-loc')?.value || '',
+    notes:             document.getElementById('ff-notes').value,
+    finish_option:     document.getElementById('ff-finish').value !== 'Standard' ? document.getElementById('ff-finish').value : null,
+    special_option:    document.getElementById('ff-special').value !== '—' ? document.getElementById('ff-special').value : null,
+    parent_filament_id: document.getElementById('ff-parent-id')?.value || null,
+    spool_label:       document.getElementById('ff-spool-label')?.value || null,
   };
   if (!body.name) return toast('Le nom est requis', 'error');
+  const tot = parseFloat(body.weight_total) || 0;
+  const rem = parseFloat(body.weight_remaining) || 0;
+  if (rem > tot) return toast('Le poids restant (' + rem + 'g) ne peut pas dépasser le poids total (' + tot + 'g)', 'error');
   try {
     if (id) await API.put('/filaments/'+id, body);
     else    await API.post('/filaments', body);
@@ -447,6 +535,21 @@ async function saveFilament(id) {
     toast(id ? 'Filament mis à jour' : 'Filament ajouté', 'success');
     renderFilaments();
   } catch (e) { toast(e.message, 'error'); }
+}
+
+function onParentChange(select) {
+  // Pre-remplir matière/couleur depuis le parent si on vient de le sélectionner
+  const parentId = parseInt(select.value);
+  if (!parentId) return;
+  const parent = allFilaments.find(function(f) { return f.id === parentId; });
+  if (!parent) return;
+  const matSel = document.getElementById('ff-mat');
+  const colInp = document.getElementById('ff-color');
+  const colName = document.getElementById('ff-colorname');
+  if (matSel  && !matSel.value)   matSel.value  = parent.material;
+  if (colInp  && colInp.value === '#cccccc') colInp.value = parent.color_hex;
+  if (colName && !colName.value)  colName.value = parent.color_name || '';
+  toast('Matière et couleur pré-remplies depuis le parent', 'success');
 }
 
 function toggleArchiveInForm(el) {

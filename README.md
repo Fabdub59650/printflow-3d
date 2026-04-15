@@ -2,7 +2,7 @@
 
 **Logiciel de gestion d'impressions 3D** — conçu pour tourner sur Raspberry Pi avec une interface web accessible depuis n'importe quel appareil du réseau local.
 
-![Version](https://img.shields.io/badge/version-2.2.0-blue)
+![Version](https://img.shields.io/badge/version-2.3.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
@@ -128,7 +128,8 @@ Interface accessible sur **`http://[IP-du-Pi]`** (port 80, proxifié depuis Node
 
 | Version | Date | Highlights |
 |---------|------|-----------|
-| **2.2.0** | 14/04/2026 | Moonraker temps réel, galerie photos, recherche globale, alertes bobines, aide en ligne, export CSV, responsive tablette |
+| **2.3.0** | 15/04/2026 | Bobines partielles, raccourcis clavier, validation poids filament |
+| 2.2.0 | 14/04/2026 | Moonraker temps réel, galerie photos, recherche globale, alertes bobines, aide en ligne, export CSV, responsive tablette |
 | 2.1.0 | 13/04/2026 | Devis client, planning intégré, purge par date |
 | 2.0.0 | 13/04/2026 | Intégration Tapo P100 |
 | 1.9.0 | 13/04/2026 | NFC ELEGOO, rapport SMTP, thème auto, multi-filaments |
