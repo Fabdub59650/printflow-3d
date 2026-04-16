@@ -2,7 +2,8 @@ function openModal(html, title, options) {
   const modal = document.getElementById('modal');
   const tabbed = options && options.tabbed;
   const wide   = options && options.wide;
-  modal.className = 'modal' + (tabbed ? ' modal-tabbed' : '') + (wide ? ' modal-wide' : '');
+  const xl     = options && options.xl;
+  modal.className = 'modal' + (tabbed ? ' modal-tabbed' : '') + (xl ? ' modal-xl' : wide ? ' modal-wide' : '');
 
   if (tabbed) {
     // Séparer le footer du reste pour le garder fixe en bas

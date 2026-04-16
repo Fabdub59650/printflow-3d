@@ -1,9 +1,17 @@
 let allPrints = [];
-let printsFilters = { status: '', printer_id: '' };
+let printsFilters = {
+  status: '', printer_id: '',
+  // Filtres avancés
+  date_from: '', date_to: '',
+  filament_id: '', rating: '',
+  duration_min: '', duration_max: '',
+  weight_min: '', weight_max: '',
+  name: '',
+};
+let _printsAdvancedOpen = false;
 
 async function renderPrints() {
   document.getElementById('page-title').textContent = 'Impressions';
-  // Injecter les styles filter-btn si besoin
   if (!document.getElementById('prints-filter-style')) {
     const s = document.createElement('style');
     s.id = 'prints-filter-style';
@@ -15,11 +23,23 @@ async function renderPrints() {
   document.getElementById('content').innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 
   const [prints, printers] = await Promise.all([
-    API.get('/prints?limit=200'),
+    API.get('/prints?limit=500'),
     API.get('/printers'),
   ]);
   allPrints = prints;
   window._allPrinters = printers;
+
+  // Collecter les filaments uniques pour le filtre avancé
+  const filamentMap = {};
+  prints.forEach(function(p) {
+    if (p.filament_id && p.filament_name) filamentMap[p.filament_id] = p.filament_name;
+    if (p.filaments) p.filaments.forEach(function(f) {
+      if (f.filament_id && f.filament_name) filamentMap[f.filament_id] = f.filament_name;
+    });
+  });
+  window._printsFilamentMap = filamentMap;
+
+  const activeAdvanced = countActiveAdvancedFilters();
 
   const statusBtns = [
     { val: '',          label: 'Tous'      },
@@ -28,10 +48,11 @@ async function renderPrints() {
     { val: 'failed',    label: 'Échouées'  },
     { val: 'paused',    label: 'En pause'  },
     { val: 'cancelled', label: 'Annulées'  },
+    { val: 'planned',   label: 'Planifiées'},
   ];
 
   const filterBar =
-    '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">' +
+    '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">' +
       '<div id="prints-filter-btns" style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">' +
         statusBtns.map(function(b) {
           return '<button class="filter-btn ' + (printsFilters.status === b.val ? 'active' : '') + '" ' +
@@ -46,12 +67,111 @@ async function renderPrints() {
           return '<option value="' + p.id + '"' + (printsFilters.printer_id === String(p.id) ? ' selected' : '') + '>' + p.name + '</option>';
         }).join('') +
       '</select>' +
+      '<button onclick="togglePrintsAdvanced()" style="display:flex;align-items:center;gap:6px;' +
+        'padding:6px 12px;font-size:12px;border-radius:var(--radius);cursor:pointer;' +
+        'border:0.5px solid ' + (activeAdvanced > 0 ? 'var(--accent)' : 'var(--border2)') + ';' +
+        'background:' + (activeAdvanced > 0 ? 'var(--accent-bg)' : 'var(--bg3)') + ';' +
+        'color:' + (activeAdvanced > 0 ? 'var(--accent)' : 'var(--text2)') + '">' +
+        '🔍 Filtres' + (activeAdvanced > 0 ? ' <span style="background:var(--accent);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700">' + activeAdvanced + '</span>' : '') +
+      '</button>' +
+      (activeAdvanced > 0 || printsFilters.status || printsFilters.printer_id ?
+        '<button onclick="resetPrintsFilters()" style="font-size:12px;padding:6px 10px;' +
+        'border-radius:var(--radius);border:0.5px solid var(--border2);background:var(--bg3);' +
+        'color:var(--text3);cursor:pointer" title="Réinitialiser tous les filtres">↺</button>' : '') +
+      '<span id="prints-count" style="font-size:12px;color:var(--text3);margin-left:4px"></span>' +
+    '</div>' +
+    '<div id="prints-advanced-panel" style="display:' + (_printsAdvancedOpen ? 'block' : 'none') + ';' +
+      'background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);' +
+      'padding:14px;margin-bottom:12px">' +
+      renderAdvancedPanel() +
     '</div>' +
     '<div id="prints-table-wrap"></div>';
 
   document.getElementById('content').innerHTML = '<div class="card">' + filterBar + '</div>';
   renderPrintsTable();
 }
+
+function renderAdvancedPanel() {
+  const filamentMap = window._printsFilamentMap || {};
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">' +
+
+    // Recherche nom
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Recherche nom / fichier</label>' +
+    '<input id="af-name" value="' + (printsFilters.name||'') + '" placeholder="Nom ou fichier…" ' +
+    'oninput="printsFilters.name=this.value;renderPrintsTable()" style="width:100%;font-size:12px"></div>' +
+
+    // Date de
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Date — du</label>' +
+    '<input id="af-date-from" type="date" value="' + (printsFilters.date_from||'') + '" ' +
+    'onchange="printsFilters.date_from=this.value;renderPrintsTable()" style="width:100%;font-size:12px"></div>' +
+
+    // Date à
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Date — au</label>' +
+    '<input id="af-date-to" type="date" value="' + (printsFilters.date_to||'') + '" ' +
+    'onchange="printsFilters.date_to=this.value;renderPrintsTable()" style="width:100%;font-size:12px"></div>' +
+
+    // Filament
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Filament</label>' +
+    '<select id="af-filament" onchange="printsFilters.filament_id=this.value;renderPrintsTable()" style="width:100%;font-size:12px">' +
+    '<option value="">Tous</option>' +
+    Object.entries(filamentMap).map(function(e) {
+      return '<option value="' + e[0] + '"' + (printsFilters.filament_id === e[0] ? ' selected' : '') + '>' + e[1] + '</option>';
+    }).join('') +
+    '</select></div>' +
+
+    // Note
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Note minimale</label>' +
+    '<select id="af-rating" onchange="printsFilters.rating=this.value;renderPrintsTable()" style="width:100%;font-size:12px">' +
+    '<option value="">Toutes</option>' +
+    [5,4,3,2,1].map(function(r) {
+      return '<option value="' + r + '"' + (printsFilters.rating == r ? ' selected' : '') + '>' + '★'.repeat(r) + ' et +</option>';
+    }).join('') +
+    '</select></div>' +
+
+    // Durée min
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Durée min (min)</label>' +
+    '<input id="af-dur-min" type="number" value="' + (printsFilters.duration_min||'') + '" placeholder="ex: 60" ' +
+    'oninput="printsFilters.duration_min=this.value;renderPrintsTable()" style="width:100%;font-size:12px"></div>' +
+
+    // Durée max
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Durée max (min)</label>' +
+    '<input id="af-dur-max" type="number" value="' + (printsFilters.duration_max||'') + '" placeholder="ex: 480" ' +
+    'oninput="printsFilters.duration_max=this.value;renderPrintsTable()" style="width:100%;font-size:12px"></div>' +
+
+    // Filament utilisé min
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Filament utilisé min (g)</label>' +
+    '<input id="af-w-min" type="number" value="' + (printsFilters.weight_min||'') + '" placeholder="ex: 10" ' +
+    'oninput="printsFilters.weight_min=this.value;renderPrintsTable()" style="width:100%;font-size:12px"></div>' +
+
+    // Filament utilisé max
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Filament utilisé max (g)</label>' +
+    '<input id="af-w-max" type="number" value="' + (printsFilters.weight_max||'') + '" placeholder="ex: 500" ' +
+    'oninput="printsFilters.weight_max=this.value;renderPrintsTable()" style="width:100%;font-size:12px"></div>' +
+
+  '</div>';
+}
+
+function countActiveAdvancedFilters() {
+  return ['date_from','date_to','filament_id','rating','duration_min','duration_max','weight_min','weight_max','name']
+    .filter(function(k) { return !!printsFilters[k]; }).length;
+}
+
+function togglePrintsAdvanced() {
+  _printsAdvancedOpen = !_printsAdvancedOpen;
+  const panel = document.getElementById('prints-advanced-panel');
+  if (panel) panel.style.display = _printsAdvancedOpen ? 'block' : 'none';
+  // Mettre à jour le style du bouton
+  renderPrints();
+}
+
+function resetPrintsFilters() {
+  printsFilters = { status: '', printer_id: '', date_from: '', date_to: '',
+    filament_id: '', rating: '', duration_min: '', duration_max: '',
+    weight_min: '', weight_max: '', name: '' };
+  _printsAdvancedOpen = false;
+  renderPrints();
+}
+
 
 function renderFilamentCell(p) {
   // Multi-filament
@@ -74,8 +194,50 @@ function renderFilamentCell(p) {
 function renderPrintsTable() {
   const printers = window._allPrinters || [];
   let data = allPrints;
-  if (printsFilters.status) data = data.filter(p => p.status === printsFilters.status);
+
+  // Filtres rapides
+  if (printsFilters.status)     data = data.filter(p => p.status === printsFilters.status);
   if (printsFilters.printer_id) data = data.filter(p => String(p.printer_id) === printsFilters.printer_id);
+
+  // Filtres avancés
+  if (printsFilters.name) {
+    const q = printsFilters.name.toLowerCase();
+    data = data.filter(function(p) {
+      return (p.name||'').toLowerCase().includes(q) || (p.file_name||'').toLowerCase().includes(q);
+    });
+  }
+  if (printsFilters.date_from) {
+    data = data.filter(function(p) { return p.created_at && p.created_at >= printsFilters.date_from; });
+  }
+  if (printsFilters.date_to) {
+    data = data.filter(function(p) { return p.created_at && p.created_at.slice(0,10) <= printsFilters.date_to; });
+  }
+  if (printsFilters.filament_id) {
+    data = data.filter(function(p) {
+      if (String(p.filament_id) === printsFilters.filament_id) return true;
+      if (p.filaments) return p.filaments.some(function(f) { return String(f.filament_id) === printsFilters.filament_id; });
+      return false;
+    });
+  }
+  if (printsFilters.rating) {
+    data = data.filter(function(p) { return (p.rating||0) >= parseInt(printsFilters.rating); });
+  }
+  if (printsFilters.duration_min) {
+    data = data.filter(function(p) { return (p.actual_duration||0) >= parseInt(printsFilters.duration_min); });
+  }
+  if (printsFilters.duration_max) {
+    data = data.filter(function(p) { return p.actual_duration && p.actual_duration <= parseInt(printsFilters.duration_max); });
+  }
+  if (printsFilters.weight_min) {
+    data = data.filter(function(p) { return (parseFloat(p.filament_used)||0) >= parseFloat(printsFilters.weight_min); });
+  }
+  if (printsFilters.weight_max) {
+    data = data.filter(function(p) { return p.filament_used && parseFloat(p.filament_used) <= parseFloat(printsFilters.weight_max); });
+  }
+
+  // Compteur
+  const countEl = document.getElementById('prints-count');
+  if (countEl) countEl.textContent = data.length + ' résultat' + (data.length !== 1 ? 's' : '');
 
   // Mettre à jour l'état actif des boutons de filtre
   document.querySelectorAll('#prints-filter-btns .filter-btn').forEach(function(btn) {
@@ -319,7 +481,7 @@ async function openPrintForm(id = null, prefillProjectId = null, defaultStatus =
         <div id="prf-planned-at-wrap" style="display:${(p.status==='planned')?'block':'none'}">
           <label class="form-label">Date planifiée</label>
           <input id="prf-planned-at" type="date"
-            value="${p.planned_at ? new Date(p.planned_at).toISOString().slice(0,10) : ''}">
+            value="${p.planned_at ? p.planned_at.slice(0,10) : ''}">
         </div>
       </div>
       <!-- Ligne 2 : Progression + Durées -->
@@ -833,7 +995,11 @@ function togglePlannedAt(status) {
     if (input && !input.value) {
       var d = new Date();
       d.setDate(d.getDate() + 1);
-      input.value = d.toISOString().slice(0, 10);
+      // Utiliser les composantes locales pour éviter le décalage UTC
+      const yyyy = d.getFullYear();
+      const mm   = String(d.getMonth() + 1).padStart(2, '0');
+      const dd   = String(d.getDate()).padStart(2, '0');
+      input.value = yyyy + '-' + mm + '-' + dd;
     }
   }
 }

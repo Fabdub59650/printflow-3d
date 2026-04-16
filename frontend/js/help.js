@@ -350,6 +350,43 @@ const HELP_SECTIONS = [
     `
   },
   {
+    id:    'shortcuts',
+    tab:   null,
+    icon:  '⌨',
+    title: 'Raccourcis clavier',
+    content: `
+<p>PrintFlow dispose de raccourcis clavier pour naviguer rapidement entre les onglets sans utiliser la souris.</p>
+
+<h4>Navigation entre onglets</h4>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin-bottom:12px">
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Tableau de bord</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">d</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Imprimantes</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">i</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Impressions</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">p</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Planning</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">l</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Filaments</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">f</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Projets</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">r</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Bibliothèque</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">b</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Maintenance</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">m</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Statistiques</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">s</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Devis</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">q</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Galerie</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">g</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Historique</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">h</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Paramètres</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">,</kbd></div>
+</div>
+
+<h4>Fonctions globales</h4>
+<div style="display:flex;flex-direction:column;gap:4px">
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Recherche globale</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">⌘K / Ctrl+K</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Aide en ligne</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">F1</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Cheatsheet raccourcis</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">?</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border)"><span>Fermer modale / panneau</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">Échap</kbd></div>
+  <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Galerie — navigation lightbox</span><kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:1px 8px;font-family:monospace;font-size:11px">← →</kbd></div>
+</div>
+
+<p style="margin-top:12px"><strong>Note :</strong> les raccourcis sont inactifs quand le curseur est dans un champ de saisie ou qu'une modale est ouverte. Les onglets désactivés (Projets, Devis, Galerie) sont ignorés si le module correspondant est désactivé dans les Paramètres.</p>
+    `
+  },
+  {
     id:    'search',
     tab:   null,
     icon:  '🔍',

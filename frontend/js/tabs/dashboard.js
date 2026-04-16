@@ -1,19 +1,33 @@
 async function renderDashboard() {
   document.getElementById('page-title').textContent = 'Tableau de bord';
-  document.getElementById('topbar-actions').innerHTML = '';
+  document.getElementById('topbar-actions').innerHTML =
+    '<button class="btn btn-sm" onclick="openDashboardCustomizer()" title="Personnaliser les widgets">' +
+    '⚙ Personnaliser</button>';
   const content = document.getElementById('content');
   content.innerHTML = '<div style="color:var(--text3);padding:40px 0 0 4px">Chargement…</div>';
 
+  // Charger la config widgets
+  if (!window._dashWidgets) {
+    try {
+      const s = await API.get('/settings');
+      const raw = s.dashboard_widgets || 'alert_stock,alert_maintenance,alert_consumables,alert_bobines,metrics,printers_stock,prints_recent,consumption,activity';
+      window._dashWidgets = new Set(raw.split(',').map(function(w){ return w.trim(); }));
+    } catch(_) {
+      window._dashWidgets = new Set(['alert_stock','alert_maintenance','alert_consumables','alert_bobines','metrics','printers_stock','prints_recent','consumption','activity']);
+    }
+  }
+  const W = window._dashWidgets;
+
   const [stats, prints, printers, projects, alerts, consumption, maintAlerts, consumableAlerts, bobineAlerts] = await Promise.all([
     API.get('/stats'),
-    API.get('/prints?limit=8'),
+    W.has('prints_recent') ? API.get('/prints?limit=8') : Promise.resolve([]),
     API.get('/printers'),
     window._projectsEnabled ? API.get('/projects') : Promise.resolve([]),
-    (window._stockAlertEnabled === true) ? API.get('/stats/alerts').catch(()=>[]) : Promise.resolve([]),
-    API.get('/stats/consumption?days=30').catch(()=>null),
-    (window._maintenanceAlertEnabled === true) ? API.get('/stats/maintenance-alerts').catch(()=>[]) : Promise.resolve([]),
-    API.get('/consumables/alerts').catch(()=>[]),
-    API.get('/alerts/bobines').catch(()=>[]),
+    (window._stockAlertEnabled === true && W.has('alert_stock')) ? API.get('/stats/alerts').catch(()=>[]) : Promise.resolve([]),
+    W.has('consumption') ? API.get('/stats/consumption?days=30').catch(()=>null) : Promise.resolve(null),
+    (window._maintenanceAlertEnabled === true && W.has('alert_maintenance')) ? API.get('/stats/maintenance-alerts').catch(()=>[]) : Promise.resolve([]),
+    W.has('alert_consumables') ? API.get('/consumables/alerts').catch(()=>[]) : Promise.resolve([]),
+    W.has('alert_bobines') ? API.get('/alerts/bobines').catch(()=>[]) : Promise.resolve([]),
   ]);
 
   const s = stats.totals;
@@ -25,7 +39,7 @@ async function renderDashboard() {
   // Widget alertes stock (défensif)
   let alertHtml = '';
   try {
-    if (Array.isArray(alerts) && alerts.length > 0) {
+    if (W.has('alert_stock') && Array.isArray(alerts) && alerts.length > 0) {
       alertHtml = '<div class="card" style="border-left:3px solid var(--warning);margin-bottom:16px">' +
         '<div class="card-header"><span class="card-title" style="color:var(--warning)">⚠ Bobines bientôt vides (' + alerts.length + ')</span></div>' +
         '<div style="display:flex;flex-direction:column;gap:8px">' +
@@ -48,7 +62,7 @@ async function renderDashboard() {
   // Widget alertes maintenance
   let maintAlertHtml = '';
   try {
-    if (Array.isArray(maintAlerts) && maintAlerts.length > 0) {
+    if (W.has('alert_maintenance') && Array.isArray(maintAlerts) && maintAlerts.length > 0) {
       maintAlertHtml = '<div class="card" style="border-left:3px solid var(--danger);margin-bottom:16px">' +
         '<div class="card-header">' +
           '<span class="card-title" style="color:var(--danger)">🔧 Maintenance à prévoir (' + maintAlerts.length + ')</span>' +
@@ -78,7 +92,7 @@ async function renderDashboard() {
   // ── Alertes consommables ─────────────────────────────────────────────────
   let consumableHtml = '';
   try {
-    if (Array.isArray(consumableAlerts) && consumableAlerts.length > 0) {
+    if (W.has('alert_consumables') && Array.isArray(consumableAlerts) && consumableAlerts.length > 0) {
       consumableHtml = '<div class="card" style="border-left:3px solid #f59e0b;margin-bottom:16px">' +
         '<div class="card-header">' +
           '<span class="card-title" style="color:#f59e0b">⚙ Consommables à remplacer (' + consumableAlerts.length + ')</span>' +
@@ -110,7 +124,7 @@ async function renderDashboard() {
   // ── Alertes bobines insuffisantes ────────────────────────────────────────
   let bobineHtml = '';
   try {
-    if (Array.isArray(bobineAlerts) && bobineAlerts.length > 0) {
+    if (W.has('alert_bobines') && Array.isArray(bobineAlerts) && bobineAlerts.length > 0) {
       bobineHtml = '<div class="card" style="border-left:3px solid #f59e0b;margin-bottom:16px">' +
         '<div class="card-header">' +
           '<span class="card-title" style="color:#f59e0b">🧵 Stock insuffisant pour ' + bobineAlerts.length + ' impression' + (bobineAlerts.length > 1 ? 's' : '') + ' planifiée' + (bobineAlerts.length > 1 ? 's' : '') + '</span>' +
@@ -152,7 +166,8 @@ async function renderDashboard() {
     }
   } catch(_) {}
 
-  content.innerHTML = alertHtml + maintAlertHtml + consumableHtml + bobineHtml + `
+  content.innerHTML = alertHtml + maintAlertHtml + consumableHtml + bobineHtml +
+    (W.has('metrics') ? `
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-label">Imprimantes actives</div>
@@ -180,8 +195,9 @@ async function renderDashboard() {
         <div class="metric-value" style="color:${lowStock.length > 0 ? 'var(--warning)' : 'var(--text)'}">${lowStock.length}</div>
         <div class="metric-sub">bobine${lowStock.length > 1 ? 's' : ''} sous 20%</div>
       </div>
-    </div>
+    </div>` : '') +
 
+    (W.has('printers_stock') ? `
     ${window._projectsEnabled && activeProjects.length > 0 ? `
     <div class="card" style="margin-bottom:16px;border-left:3px solid var(--accent);border-radius:0 var(--radius-lg) var(--radius-lg) 0">
       <div class="card-header">
@@ -205,9 +221,9 @@ async function renderDashboard() {
           </div>
         </div>`;
       }).join('')}
-    </div>` : ''}
+    </div>` : ''}` : '') +
 
-    <div class="grid-2">
+    (W.has('printers_stock') ? `
       <div class="card">
         <div class="card-header">
           <span class="card-title">Imprimantes</span>
@@ -240,9 +256,9 @@ async function renderDashboard() {
               </div>`;
             }).join('')}
       </div>
-    </div>
+    </div>` : '') +
 
-    ${prints.length > 0 ? `
+    (W.has('prints_recent') && prints.length > 0 ? `
     <div class="card">
       <div class="card-header">
         <span class="card-title">Impressions récentes</span>
@@ -263,10 +279,8 @@ async function renderDashboard() {
           }).join('')}
         </tbody>
       </table>
-    </div>` : ''}`;
-
-  // Widget consommation 30j
-  if (consumption && consumption.byMaterial && consumption.byMaterial.length) {
+    </div>` : '');
+    if (W.has('consumption') && consumption && consumption.byMaterial && consumption.byMaterial.length) {
     const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
     const totalConso = consumption.byMaterial.reduce(function(s,r){ return s+parseFloat(r.total_g||0); },0);
     const consoHtml = '<div class="card"><div class="card-header">' +
@@ -308,11 +322,13 @@ async function renderDashboard() {
   }
 
   // ── Graphique activité 12 mois ──────────────────────────────────────────
-  try {
-    const activity = await API.get('/stats/activity').catch(() => ({}));
-    const activityHtml = renderActivityGraph(activity);
-    content.innerHTML += activityHtml;
-  } catch(_) {}
+  if (W.has('activity')) {
+    try {
+      const activity = await API.get('/stats/activity').catch(() => ({}));
+      const activityHtml = renderActivityGraph(activity);
+      content.innerHTML += activityHtml;
+    } catch(_) {}
+  }
 }
 
 async function markMaintenanceDone(id) {
@@ -426,6 +442,100 @@ async function resetConsumable(id) {
   try {
     await API.patch('/consumables/' + id + '/reset', {});
     toast('Consommable remplacé — compteur réinitialisé ✓', 'success');
+    renderDashboard();
+  } catch(e) { toast('Erreur : ' + e.message, 'error'); }
+}
+
+// ── Personnalisation du dashboard ─────────────────────────────────────────
+
+const DASH_WIDGET_DEFS = [
+  { id: 'alert_stock',        icon: '⚠',  label: 'Alertes stock bobines',         group: 'Alertes' },
+  { id: 'alert_maintenance',  icon: '🔧', label: 'Alertes maintenance',            group: 'Alertes' },
+  { id: 'alert_consumables',  icon: '⚙️', label: 'Alertes consommables',           group: 'Alertes' },
+  { id: 'alert_bobines',      icon: '🧵', label: 'Stock insuffisant planification', group: 'Alertes' },
+  { id: 'metrics',            icon: '📊', label: 'Métriques principales',          group: 'Widgets' },
+  { id: 'printers_stock',     icon: '🖨', label: 'Imprimantes & Stock faible',     group: 'Widgets' },
+  { id: 'prints_recent',      icon: '📋', label: 'Impressions récentes',           group: 'Widgets' },
+  { id: 'consumption',        icon: '📉', label: 'Consommation 30 jours',          group: 'Widgets' },
+  { id: 'activity',           icon: '📅', label: 'Graphique activité 12 mois',     group: 'Widgets' },
+];
+
+function openDashboardCustomizer() {
+  const W = window._dashWidgets || new Set();
+
+  const groups = {};
+  DASH_WIDGET_DEFS.forEach(function(w) {
+    if (!groups[w.group]) groups[w.group] = [];
+    groups[w.group].push(w);
+  });
+
+  const rows = Object.entries(groups).map(function([grp, widgets]) {
+    return '<div style="margin-bottom:14px">' +
+      '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;' +
+        'letter-spacing:0.06em;margin-bottom:8px">' + grp + '</div>' +
+      widgets.map(function(w) {
+        const on = W.has(w.id);
+        return '<label style="display:flex;align-items:center;justify-content:space-between;' +
+          'padding:10px 12px;background:var(--bg3);border-radius:var(--radius);' +
+          'margin-bottom:6px;cursor:pointer">' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+            '<span style="font-size:16px">' + w.icon + '</span>' +
+            '<span style="font-size:13px">' + w.label + '</span>' +
+          '</div>' +
+          '<div onclick="toggleDashWidget(\'' + w.id + '\',this)" data-enabled="' + (on?'1':'0') + '" ' +
+            'style="width:36px;height:20px;border-radius:10px;cursor:pointer;flex-shrink:0;' +
+            'transition:background 0.2s;position:relative;' +
+            'background:' + (on ? 'var(--accent)' : 'var(--border2)') + '">' +
+            '<div style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;' +
+              'top:2px;transition:left 0.2s;left:' + (on ? '18px' : '2px') + '"></div>' +
+          '</div>' +
+        '</label>';
+      }).join('') +
+    '</div>';
+  }).join('');
+
+  openModal(
+    rows +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Annuler</button>' +
+      '<button class="btn btn-sm" onclick="resetDashWidgets()" ' +
+        'style="margin-right:auto">↺ Tout réactiver</button>' +
+      '<button class="btn btn-primary" onclick="saveDashWidgets()">Enregistrer</button>' +
+    '</div>',
+    '⚙ Personnaliser le tableau de bord'
+  );
+}
+
+function toggleDashWidget(id, el) {
+  const on = el.dataset.enabled === '1';
+  const newState = !on;
+  el.dataset.enabled = newState ? '1' : '0';
+  el.style.background = newState ? 'var(--accent)' : 'var(--border2)';
+  el.querySelector('div').style.left = newState ? '18px' : '2px';
+}
+
+function resetDashWidgets() {
+  document.querySelectorAll('[data-enabled]').forEach(function(el) {
+    el.dataset.enabled = '1';
+    el.style.background = 'var(--accent)';
+    el.querySelector('div').style.left = '18px';
+  });
+}
+
+async function saveDashWidgets() {
+  const active = DASH_WIDGET_DEFS
+    .filter(function(w) {
+      const el = document.querySelector('[onclick*="' + w.id + '"]');
+      return el && el.dataset.enabled === '1';
+    })
+    .map(function(w) { return w.id; });
+
+  const value = active.join(',');
+  try {
+    await API.put('/settings', { dashboard_widgets: value });
+    window._dashWidgets = new Set(active);
+    closeModal();
+    toast('Tableau de bord mis à jour', 'success');
     renderDashboard();
   } catch(e) { toast('Erreur : ' + e.message, 'error'); }
 }

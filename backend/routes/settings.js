@@ -8,8 +8,8 @@ router.get('/', async (req, res) => {
     const settings = {};
     rows.forEach(r => { settings[r.key_name] = r.value; });
     // Informations de version (non stockées en base)
-    settings._version    = '2.3.0';
-    settings._build_date = '15/04/2026';
+    settings._version    = '2.4.0';
+    settings._build_date = '16/04/2026';
     res.json(settings);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -59,7 +59,7 @@ router.get('/purge-stats', async (req, res) => {
       ['maintenance',       'SELECT COUNT(*) AS n FROM maintenance'],
       ['consumables',       'SELECT COUNT(*) AS n FROM consumables'],
       ['projects',          'SELECT COUNT(*) AS n FROM projects'],
-      ['history_log',       'SELECT COUNT(*) AS n FROM history_log'],
+      ['audit_log',         'SELECT COUNT(*) AS n FROM audit_log'],
       ['quotes',            'SELECT COUNT(*) AS n FROM quotes'],
       ['filaments',         'SELECT COUNT(*) AS n FROM filaments'],
       ['printers',          'SELECT COUNT(*) AS n FROM printers'],
@@ -87,7 +87,7 @@ router.post('/purge', async (req, res) => {
     // Tables autorisées uniquement — pas de paramètres ni de templates
     const ALLOWED = [
       'prints', 'print_filaments', 'filament_weighings',
-      'maintenance', 'consumables', 'projects', 'history_log',
+      'maintenance', 'consumables', 'projects', 'audit_log',
       'filaments', 'printers', 'library_objects', 'library_files',
       'quotes',
     ];
@@ -101,7 +101,7 @@ router.post('/purge', async (req, res) => {
     // Ordre respectant les FK — d'abord les enfants
     const ORDER = [
       'print_filaments', 'filament_weighings', 'maintenance',
-      'consumables', 'history_log',
+      'consumables', 'audit_log',
       'prints',       // après print_filaments
       'projects',
       'quotes',

@@ -507,4 +507,49 @@ router.get('/costs', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/stats/compare-printers?days=30 — comparaison imprimantes côte à côte
+router.get('/compare-printers', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+
+    const [rows] = await db.query(`
+      SELECT
+        pr.id, pr.name, pr.model, pr.status AS printer_status,
+        COUNT(p.id)                                               AS total,
+        SUM(p.status = 'done')                                    AS success,
+        SUM(p.status = 'failed')                                  AS failed,
+        SUM(p.status = 'cancelled')                               AS cancelled,
+        ROUND(SUM(COALESCE(p.actual_duration,0)) / 60, 1)         AS hours,
+        ROUND(SUM(COALESCE(p.filament_used,0)))                   AS grams,
+        ROUND(AVG(NULLIF(p.actual_duration,0)) / 60, 2)           AS avg_duration_h,
+        ROUND(AVG(NULLIF(p.rating,0)), 1)                         AS avg_rating,
+        MAX(p.created_at)                                         AS last_print
+      FROM printers pr
+      LEFT JOIN prints p ON p.printer_id = pr.id
+        AND p.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+        AND p.status IN ('done','failed','cancelled')
+      GROUP BY pr.id, pr.name, pr.model, pr.status
+      ORDER BY total DESC
+    `, [days]);
+
+    // Calcul du taux de réussite
+    const printers = rows.map(function(r) {
+      return Object.assign({}, r, {
+        rate: r.total > 0 ? Math.round(r.success / r.total * 100) : null,
+        avg_duration_label: r.avg_duration_h
+          ? Math.floor(r.avg_duration_h) + 'h' + Math.round((r.avg_duration_h % 1) * 60) + 'min'
+          : '—',
+      });
+    });
+
+    // Trouver le max de chaque métrique pour les barres
+    const maxTotal  = Math.max(...printers.map(function(p) { return p.total || 0; }), 1);
+    const maxHours  = Math.max(...printers.map(function(p) { return parseFloat(p.hours) || 0; }), 1);
+    const maxGrams  = Math.max(...printers.map(function(p) { return parseInt(p.grams) || 0; }), 1);
+    const maxRate   = 100;
+
+    res.json({ printers, days, maxTotal, maxHours, maxGrams, maxRate });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

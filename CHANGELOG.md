@@ -1,77 +1,79 @@
 # Changelog PrintFlow-3D
 
+## [2.4.0] — 2026-04-16
+
+### Ajouté
+- **Générateur d'étiquettes filaments** — accessible depuis l'onglet Filaments (bouton 🏷 Étiquettes)
+  - 7 préréglages : Avery L7651/L7160/L7163/L7168, Dymo 36×89/54×101, Libre
+  - Paramètres complets : colonnes, lignes, dimensions, marges, espacements (entiers)
+  - **Étiquette de départ** — reprendre une feuille partiellement utilisée
+  - **Copies par bobine** — imprimer N exemplaires de chaque bobine
+  - Contenu configurable : QR Code, Nom, Marque, Matière, Couleur, Stock, Températures, Emplacement, N° bobine
+  - Sélection individuelle des bobines + boutons Tout/Aucun
+  - Aperçu temps réel mis à l'échelle avec QR code SVG représentatif
+  - Impression HTML avec QR codes générés (canvas carré, sans doublon img/canvas)
+  - **Sauvegarde de la mise en page** — configuration persistante entre sessions
+- **Comparaison imprimantes** — nouvel onglet "Comparer" dans les Statistiques
+  - Cartes colorées par imprimante avec 4 métriques + barres de progression relatives
+  - Badge ⭐ Meilleure imprimante
+  - Toggle de période : 7j / 30j / 3 mois / 12 mois
+  - Tableau comparatif complet (taux de réussite, heures, filament, note, durée moyenne)
+  - Intégré dans le rapport mensuel PDF (page 2)
+- **Rapport mensuel PDF** — génération HTML depuis l'onglet Statistiques (bouton 📄 PDF)
+  - Page 1 : métriques clés avec comparaison mois précédent (▲▼%)
+  - Page 2 : comparaison imprimantes (tableau + cartes visuelles)
+  - Page 3 : liste complète des impressions du mois
+  - Page 4 : galerie photos 4★ et 5★
+- **Toggle thème clair/sombre** — bouton 🌙/☀️ dans la topbar
+  - Bascule instantanée, sauvegarde la préférence en base
+- **Recherche avancée filaments** — panneau de filtres combinables
+  - Finition, propriété spéciale, diamètre, NFC, stock min/max, stock faible %, emplacement
+  - Badge avec nombre de filtres actifs, bouton ↺ Réinitialiser
+  - Emplacement masqué si paramètre désactivé
+- **Vue calendrier planning** — toggle Liste / Semaine / Mois dans la topbar du Planning
+  - Vue Mois : grille 7 colonnes, navigation ◀ ▶, aujourd'hui surligné, pastilles colorées par imprimante
+  - Vue Semaine : 7 colonnes avec détails (imprimante, durée, badge statut)
+  - Légende des couleurs par imprimante
+  - Badges alertes bobines 🟡🔴 dans les deux vues
+- **QR Code par bobine** — bouton QR sur chaque ligne filament
+  - Modale avec QR + fiche complète de la bobine
+  - Bouton 🖨 Imprimer l'étiquette individuelle
+  - Scan → ouverture directe dans PrintFlow (`/#filament/:id`)
+- **Section Raccourcis clavier** dans l'aide en ligne (F1)
+  - Tableau complet de tous les raccourcis par catégorie
+
+### Corrigé
+- Purge Historique : table `history_log` → `audit_log` (compteur et suppression)
+- Toggle thème sombre : fond `var(--accent-bg)` → `var(--bg3)` + bordure accent (lisible en dark)
+- Stats topbar : backtick de fermeture manquant causant une erreur JS au chargement
+- Apostrophes non échappées dans `renderStatsGlobal` (exportCSV, Temps d'impression)
+
+---
+
 ## [2.3.0] — 2026-04-15
 
 ### Ajouté
-- **Bobines partielles** — gestion de plusieurs bobines du même filament avec suivi individuel du stock
-  - Bouton **+½** sur chaque filament pour créer une bobine partielle rattachée
-  - Section dédiée dans le formulaire filament avec sélection du parent et étiquette libre
-  - Affichage indenté (↳) dans la liste avec badge orange "Partielle · étiquette"
-  - Badge **Σ stock total** sur le parent (toutes bobines du groupe confondues)
-  - Alertes de stock calculées sur le stock cumulé du groupe entier
-  - Tri automatique : les partielles apparaissent juste après leur parent
-  - Pré-remplissage automatique matière/couleur depuis le parent à la création
-- **Raccourcis clavier** — navigation rapide entre les onglets
-  - `d` Dashboard · `i` Imprimantes · `p` Impressions · `l` Planning
-  - `f` Filaments · `r` Projets · `b` Bibliothèque · `m` Maintenance
-  - `s` Statistiques · `q` Devis · `g` Galerie · `h` Historique · `,` Paramètres
-  - `F1` Aide · `⌘K` Recherche · `?` Cheatsheet des raccourcis
-  - Flash de confirmation discret à chaque navigation
-  - Badge ⌨ sur le bouton ? pour accéder à la cheatsheet
-  - Ignorés si focus dans un champ ou modale ouverte
-- **Validation poids filament** — le poids restant ne peut pas dépasser le poids total
-  - Bordure rouge en temps réel sur le champ si invalide
-  - Blocage de la sauvegarde avec message d'erreur explicite
-- **Aide en ligne enrichie** — sections Bobines partielles et Galerie ajoutées
-
-### Corrigé
-- Comparaison de types int/string pour `parent_filament_id` (String() des deux côtés)
-- Calcul du stock total du groupe utilise `allFilaments` complet (pas la liste filtrée)
+- Bobines partielles, raccourcis clavier, validation poids filament
+- Tableau de bord personnalisable (9 widgets activables)
+- Recherche avancée impressions (8 critères combinables)
+- Alertes stock filament améliorées
 
 ---
 
 ## [2.2.0] — 2026-04-14
 
 ### Ajouté
-- **Moonraker temps réel** — suivi live des imprimantes Klipper/Fluidd
-- **Export CSV** — Impressions, Filaments, Stats
-- **Rapport hebdomadaire enrichi** — sections Devis et Planning
-- **Statistiques Activité** — courbe d'impressions par mois/trimestre sur 12 mois
-- **Statistiques Historique filament** — courbe de consommation par matière
-- **Duplication d'impression** — bouton ⎘
-- **Recherche globale** — barre de recherche (⌘K / Ctrl+K)
-- **Alertes bobines anticipées** — stock insuffisant pour impressions planifiées
-- **Galerie photos** — grille, filtres, lightbox, activable dans Paramètres
-- **Aide en ligne** — panneau latéral contextuel (F1), 15 sections, recherche plein texte
-- **Réorganisation fiche filament** — sections compactes sans scroll
-- **Responsive tablette** — sidebar hamburger, grilles adaptées
-- **Purge par date** — données antérieures à une date choisie
-- **Historique enrichi** — Devis et Maintenance dans l'onglet Historique
-- **Retour onglet intelligent** — Planning et Galerie conservés après modification
-
-### Corrigé
-- Colonnes SQL ambiguës (created_at, status) dans les stats
-- Format ISO datetime pour planned_at (MariaDB)
-- Alertes bobines multi-filaments (print_filaments.quantity_estimated)
-- Noms de fonctions recherche globale (openFilamentForm, openObjectDetail)
+- Moonraker temps réel, export CSV, galerie photos, aide en ligne
+- Recherche globale, alertes bobines planifiées, stats activité
+- Responsive tablette, purge par date, historique enrichi
 
 ---
 
 ## [2.1.0] — 2026-04-13
-
-### Ajouté
-- Devis client, Planning intégré, Purge par date, Toggle modules
-
----
+- Devis client, planning intégré, toggle modules
 
 ## [2.0.0] — 2026-04-13
-
-### Ajouté
 - Intégration Tapo P100
 
----
-
 ## [1.9.0] — 2026-04-13
-
-### Ajouté
-- NFC ELEGOO, rapport SMTP AES-256, thème auto, multi-filaments, photo impression
+- NFC ELEGOO, rapport SMTP, thème auto, multi-filaments

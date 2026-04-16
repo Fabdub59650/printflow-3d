@@ -1,21 +1,20 @@
 async function renderStats() {
   document.getElementById('page-title').textContent = 'Statistiques';
   document.getElementById('topbar-actions').innerHTML = `
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+    <div style="display:flex;gap:4px;align-items:center;overflow-x:auto;flex-wrap:nowrap">
+      <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;flex-shrink:0">
         <button class="filter-btn active" data-view="global"      onclick="switchStatsView('global',this)">Global</button>
         <button class="filter-btn"        data-view="activity"    onclick="switchStatsView('activity',this)">Activité</button>
+        <button class="filter-btn"        data-view="compare"     onclick="switchStatsView('compare',this)">Comparer</button>
         <button class="filter-btn"        data-view="filaments"   onclick="switchStatsView('filaments',this)">Filaments</button>
         <button class="filter-btn"        data-view="prints"      onclick="switchStatsView('prints',this)">Impressions</button>
         <button class="filter-btn"        data-view="consumption" onclick="switchStatsView('consumption',this)">Consommation</button>
         <button class="filter-btn"        data-view="history"     onclick="switchStatsView('history',this)">Historique</button>
         <button class="filter-btn"        data-view="costs"       onclick="switchStatsView('costs',this)">Coûts</button>
       </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-sm" onclick="exportCSV('prints')"   title="Exporter les impressions en CSV">⬇ Impressions</button>
-        <button class="btn btn-sm" onclick="exportCSV('filaments')" title="Exporter les filaments en CSV">⬇ Filaments</button>
-        <button class="btn btn-sm" onclick="exportCSV('stats')"    title="Exporter les stats en CSV">⬇ Stats</button>
-      </div>
+      <button class="btn btn-sm" onclick="openMonthlyReportPicker()"
+        style="flex-shrink:0;background:var(--accent-bg);color:var(--accent);border-color:var(--accent)"
+        title="Rapport mensuel PDF">📄 PDF</button>
     </div>`;
   document.getElementById('content').innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 
@@ -37,6 +36,7 @@ function switchStatsView(view, btn) {
   if (btn) btn.classList.add('active');
   if (view === 'global')      renderStatsGlobal();
   if (view === 'activity')    renderStatsActivity();
+  if (view === 'compare')     renderStatsCompare();
   if (view === 'filaments')   renderStatsFilaments();
   if (view === 'prints')      renderStatsPrints();
   if (view === 'consumption') renderStatsConsumption();
@@ -51,83 +51,91 @@ async function renderStatsGlobal() {
   const s     = stats.totals;
   const successRate = s.total_prints > 0 ? Math.round((s.success/s.total_prints)*100) : 0;
 
-  content.innerHTML = `
-    <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-label">Total impressions</div>
-        <div class="metric-value">${s.total_prints||0}</div>
-        <div class="metric-sub">Taux de réussite : ${successRate}%</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Filament consommé</div>
-        <div class="metric-value">${((s.total_grams||0)/1000).toFixed(2)}<span style="font-size:14px"> kg</span></div>
-        <div class="metric-sub">${Math.round(s.total_grams||0)} g au total</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Temps d'impression</div>
-        <div class="metric-value">${fmtDuration(s.total_minutes)}</div>
-        <div class="metric-sub">${Math.round((s.total_minutes||0)/60)} heures</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">Imprimantes</div>
-        <div class="metric-value">${s.printer_count}</div>
-        <div class="metric-sub">${s.filament_count} bobines actives</div>
-      </div>
-    </div>
+  const exportBar =
+    '<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">' +
+    '<button class="btn btn-sm" onclick="exportCSV(\'prints\')" title="Exporter les impressions en CSV">⬇ CSV Impressions</button>' +
+    '<button class="btn btn-sm" onclick="exportCSV(\'filaments\')" title="Exporter les filaments en CSV">⬇ CSV Filaments</button>' +
+    '<button class="btn btn-sm" onclick="exportCSV(\'stats\')" title="Exporter les stats en CSV">⬇ CSV Stats</button>' +
+    '</div>';
 
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-header"><span class="card-title">Consommation par matière</span></div>
-        ${stats.byMaterial.length === 0
-          ? '<p style="color:var(--text3);font-size:13px">Aucune donnée</p>'
-          : stats.byMaterial.map(m => {
-              const total = stats.byMaterial.reduce((s,x)=>s+(parseFloat(x.grams)||0),0);
-              const pct   = total > 0 ? Math.round((m.grams/total)*100) : 0;
-              return `<div style="margin-bottom:10px">
-                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                  <span style="font-size:13px;font-weight:500">${m.material}</span>
-                  <span style="font-size:12px;color:var(--text2)">${Math.round(m.grams)}g · ${m.count} impressions</span>
-                </div>
-                <div class="progress-wrap"><div class="progress-fill" style="width:${pct}%"></div></div>
-              </div>`;
-            }).join('')}
-      </div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">Par imprimante</span></div>
-        <table>
-          <thead><tr><th>Imprimante</th><th>Impressions</th><th>Réussite</th><th>Filament</th></tr></thead>
-          <tbody>
-            ${stats.byPrinter.map(p => `<tr>
-              <td style="font-weight:500">${p.name}</td>
-              <td>${p.total_prints||0}</td>
-              <td>${p.total_prints>0?Math.round((p.total_success/p.total_prints)*100):0}%</td>
-              <td>${Math.round(p.total_grams||0)}g</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
+  const metricsHtml =
+    '<div class="metrics-grid">' +
+      '<div class="metric-card">' +
+        '<div class="metric-label">Total impressions</div>' +
+        '<div class="metric-value">' + (s.total_prints||0) + '</div>' +
+        '<div class="metric-sub">Taux de réussite : ' + successRate + '%</div>' +
+      '</div>' +
+      '<div class="metric-card">' +
+        '<div class="metric-label">Filament consommé</div>' +
+        '<div class="metric-value">' + ((s.total_grams||0)/1000).toFixed(2) + '<span style="font-size:14px"> kg</span></div>' +
+        '<div class="metric-sub">' + Math.round(s.total_grams||0) + ' g au total</div>' +
+      '</div>' +
+      '<div class="metric-card">' +
+        '<div class="metric-label">Temps d\'impression</div>' +
+        '<div class="metric-value">' + Math.round(s.total_hours||0) + '<span style="font-size:14px"> h</span></div>' +
+      '</div>' +
+      '<div class="metric-card">' +
+        '<div class="metric-label">Imprimantes</div>' +
+        '<div class="metric-value">' + (stats.printerCount||0) + '</div>' +
+        '<div class="metric-sub">' + (stats.filamentCount||0) + ' filaments</div>' +
+      '</div>' +
+    '</div>';
 
-    <div class="card">
-      <div class="card-header"><span class="card-title">Activité mensuelle</span></div>
-      ${stats.byMonth.length === 0
-        ? '<p style="color:var(--text3);font-size:13px">Aucune donnée</p>'
-        : `<div style="display:flex;align-items:flex-end;gap:6px;height:120px;padding:8px 0">
-            ${(() => {
-              const max = Math.max(...stats.byMonth.map(m=>m.count));
-              return stats.byMonth.map(m => {
-                const h = max > 0 ? Math.round((m.count/max)*100) : 0;
-                return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
-                  <div style="font-size:10px;color:var(--text3)">${m.count}</div>
-                  <div style="width:100%;background:var(--accent);border-radius:3px 3px 0 0;height:${h}%;min-height:2px"></div>
-                  <div style="font-size:9px;color:var(--text3);writing-mode:vertical-rl;transform:rotate(180deg)">${m.month}</div>
-                </div>`;
-              }).join('');
-            })()}
-          </div>`}
-    </div>`;
+  const totalUsed = stats.byMaterial.reduce(function(s,m){ return s + (parseFloat(m.grams)||0); }, 0);
+  const matHtml = stats.byMaterial.map(function(m) {
+    const pct = totalUsed > 0 ? Math.round((m.grams/totalUsed)*100) : 0;
+    return '<div style="margin-bottom:10px">' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:4px">' +
+        '<span style="font-size:13px;font-weight:500">' + m.material + '</span>' +
+        '<span style="font-size:12px;color:var(--text2)">' + Math.round(m.grams) + 'g · ' + m.count + ' impressions</span>' +
+      '</div>' +
+      '<div class="progress-wrap"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
+    '</div>';
+  }).join('');
+
+  const printerHtml = stats.byPrinter.map(function(p) {
+    const rate = p.total_prints > 0 ? Math.round((p.total_success/p.total_prints)*100) : 0;
+    return '<tr>' +
+      '<td style="font-weight:500">' + p.name + '</td>' +
+      '<td>' + (p.total_prints||0) + '</td>' +
+      '<td>' + rate + '%</td>' +
+      '<td>' + Math.round(p.total_grams||0) + 'g</td>' +
+    '</tr>';
+  }).join('');
+
+  const maxMonth = Math.max(...(stats.byMonth||[]).map(function(m){ return m.count||0; }), 1);
+  const monthHtml = stats.byMonth && stats.byMonth.length
+    ? '<div style="display:flex;align-items:flex-end;gap:6px;height:120px;padding:8px 0">' +
+      stats.byMonth.map(function(m) {
+        const h = Math.round((m.count/maxMonth)*100);
+        return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0">' +
+          '<div style="font-size:10px;color:var(--text2)">' + (m.count||0) + '</div>' +
+          '<div style="width:100%;background:var(--accent);border-radius:3px 3px 0 0;height:' + h + '%;min-height:2px"></div>' +
+          '<div style="font-size:9px;color:var(--text3);writing-mode:vertical-rl;transform:rotate(180deg)">' + m.month + '</div>' +
+        '</div>';
+      }).join('') +
+      '</div>'
+    : '<p style="color:var(--text3);font-size:13px">Aucune donnée</p>';
+
+  const gridHtml =
+    '<div class="grid-2" style="margin-bottom:16px">' +
+      '<div class="card">' +
+        '<div class="card-header"><span class="card-title">Par matière</span></div>' +
+        matHtml +
+      '</div>' +
+      '<div class="card">' +
+        '<div class="card-header"><span class="card-title">Par imprimante</span></div>' +
+        '<table><thead><tr><th>Imprimante</th><th>Impressions</th><th>Réussite</th><th>Filament</th></tr></thead>' +
+        '<tbody>' + printerHtml + '</tbody></table>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card">' +
+      '<div class="card-header"><span class="card-title">Activité mensuelle</span></div>' +
+      monthHtml +
+    '</div>';
+
+  content.innerHTML = exportBar + metricsHtml + gridHtml;
 }
-
 async function renderStatsFilaments() {
   const content = document.getElementById('content');
   content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
@@ -999,4 +1007,501 @@ async function renderStatsActivity() {
 function setActivityMode(mode) {
   _activityMode = mode;
   renderStatsActivity();
+}
+
+// ── Rapport mensuel PDF ───────────────────────────────────────────────────
+
+function openMonthlyReportPicker() {
+  const now   = new Date();
+  const defMonth = now.getFullYear() + '-' + String(now.getMonth()).padStart(2,'0'); // mois précédent
+  const curMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+  openModal(
+    '<div style="margin-bottom:16px">' +
+      '<label class="form-label">Sélectionner le mois</label>' +
+      '<input id="report-month" type="month" value="' + (now.getMonth() === 0 ? (now.getFullYear()-1)+'-12' : defMonth) + '" ' +
+        'max="' + curMonth + '" style="font-size:13px;width:100%">' +
+    '</div>' +
+    '<p style="font-size:12px;color:var(--text3);margin-bottom:16px">' +
+      'Le rapport s\'ouvrira dans une nouvelle fenêtre. Utilisez Ctrl+P / ⌘+P pour l\'imprimer ou l\'enregistrer en PDF.' +
+    '</p>' +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="generateMonthlyReport(document.getElementById(\'report-month\').value)">📄 Générer le rapport</button>' +
+    '</div>',
+    'Rapport mensuel PDF'
+  );
+}
+
+async function generateMonthlyReport(month) {
+  if (!month) return toast('Sélectionnez un mois', 'error');
+  closeModal();
+  toast('Génération du rapport…');
+
+  let data;
+  try { data = await API.get('/report/monthly?month=' + month); }
+  catch(e) { toast('Erreur : ' + e.message, 'error'); return; }
+
+  const d    = data;
+  const s    = d.stats;
+  const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+
+  const monthLabel = new Date(month + '-15').toLocaleDateString('fr-FR', { month:'long', year:'numeric' });
+  const capitalize = function(str) { return str.charAt(0).toUpperCase() + str.slice(1); };
+
+  // ── Comparaison mois précédent
+  function delta(val, prev) {
+    if (!prev || prev == 0) return '';
+    const d = val - prev;
+    const pct = Math.round(Math.abs(d) / prev * 100);
+    return '<span style="font-size:11px;color:' + (d >= 0 ? '#10b981' : '#ef4444') + ';margin-left:6px">' +
+      (d >= 0 ? '▲' : '▼') + ' ' + pct + '% vs mois préc.</span>';
+  }
+
+  // ── Barres de progression inline
+  function bar(pct, color) {
+    return '<div style="height:6px;background:#e5e7eb;border-radius:3px;margin-top:4px">' +
+      '<div style="height:100%;width:' + Math.min(100,pct) + '%;background:' + color + ';border-radius:3px"></div></div>';
+  }
+
+  // ── HTML du rapport
+  const html = `<!DOCTYPE html><html lang="fr"><head>
+  <meta charset="utf-8">
+  <title>Rapport ${capitalize(monthLabel)} — ${d.appName}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#111;background:#fff;padding:32px}
+    h1{font-size:22px;font-weight:700;margin-bottom:4px}
+    h2{font-size:15px;font-weight:600;margin:24px 0 12px;padding-bottom:6px;border-bottom:2px solid #e5e7eb;color:#374151}
+    h3{font-size:13px;font-weight:600;margin-bottom:8px;color:#6b7280}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;
+            padding-bottom:16px;border-bottom:2px solid #111}
+    .subtitle{font-size:13px;color:#6b7280;margin-top:4px}
+    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+    .metric{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px}
+    .metric-val{font-size:28px;font-weight:700;color:#111;margin-bottom:2px}
+    .metric-label{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em}
+    .metric-sub{font-size:11px;color:#6b7280;margin-top:4px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+    .card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th{text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.04em;
+       padding:6px 8px;border-bottom:1px solid #e5e7eb;font-weight:500}
+    td{padding:7px 8px;border-bottom:1px solid #f3f4f6}
+    tr:last-child td{border-bottom:none}
+    .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+    .done{background:#dcfce7;color:#16a34a}
+    .failed{background:#fee2e2;color:#dc2626}
+    .cancelled{background:#f3f4f6;color:#6b7280}
+    .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle}
+    .gallery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+    .gallery-item{border-radius:6px;overflow:hidden;border:1px solid #e5e7eb}
+    .gallery-item img{width:100%;height:140px;object-fit:cover;display:block}
+    .gallery-caption{padding:6px 8px;font-size:11px;color:#374151;font-weight:500}
+    .gallery-stars{color:#f59e0b;font-size:11px;padding:0 8px 6px}
+    .page-break{page-break-before:always;padding-top:24px}
+    .rate-bar{height:8px;background:#e5e7eb;border-radius:4px;margin-top:6px;overflow:hidden}
+    .rate-fill{height:100%;border-radius:4px}
+    .footer{margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;
+            font-size:11px;color:#9ca3af;display:flex;justify-content:space-between}
+    @media print{
+      body{padding:16px}
+      @page{margin:12mm;size:A4}
+      .page-break{page-break-before:always}
+    }
+  </style>
+</head><body>
+
+<!-- EN-TÊTE -->
+<div class="header">
+  <div>
+    <h1>${d.appName}</h1>
+    <div class="subtitle">Rapport mensuel — ${capitalize(monthLabel)}</div>
+  </div>
+  <div style="text-align:right;font-size:11px;color:#9ca3af">
+    Généré le ${new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})}<br>
+    ${d.dateFrom} → ${d.dateTo}
+  </div>
+</div>
+
+<!-- PAGE 1 : RÉSUMÉ -->
+<h2>📊 Résumé du mois</h2>
+<div class="metrics">
+  <div class="metric">
+    <div class="metric-val">${s.total}</div>
+    <div class="metric-label">Impressions</div>
+    <div class="metric-sub">${delta(s.total, d.prevStats?.total)}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-val" style="color:${s.rate>=90?'#16a34a':s.rate>=70?'#d97706':'#dc2626'}">${s.rate}%</div>
+    <div class="metric-label">Taux de réussite</div>
+    <div class="metric-sub">${s.success} réussies · ${s.failed} échouées · ${s.cancelled} annulées</div>
+  </div>
+  <div class="metric">
+    <div class="metric-val">${s.hours}h</div>
+    <div class="metric-label">Heures d'impression</div>
+    <div class="metric-sub">${delta(s.hours, d.prevStats?.hours)}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-val">${s.grams}g</div>
+    <div class="metric-label">Filament consommé</div>
+    <div class="metric-sub">${delta(s.grams, d.prevStats?.grams)}</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- Par imprimante -->
+  <div class="card">
+    <h3>🖨 Par imprimante</h3>
+    ${d.printerStats.length ? d.printerStats.map(function(p, i) {
+      const pct = s.total > 0 ? Math.round(p.count/s.total*100) : 0;
+      return '<div style="margin-bottom:10px">' +
+        '<div style="display:flex;justify-content:space-between;font-size:12px">' +
+          '<span style="font-weight:500">' +
+            '<span class="dot" style="background:' + COLORS[i%COLORS.length] + '"></span>' + p.name +
+          '</span>' +
+          '<span style="color:#6b7280">' + p.count + ' impr. · ' + p.hours + 'h</span>' +
+        '</div>' +
+        bar(pct, COLORS[i%COLORS.length]) +
+      '</div>';
+    }).join('') : '<p style="color:#9ca3af;font-size:12px">Aucune impression ce mois.</p>'}
+  </div>
+
+  <!-- Par matière -->
+  <div class="card">
+    <h3>🧵 Filaments utilisés</h3>
+    ${d.topFilaments.length ? d.topFilaments.map(function(f, i) {
+      const maxG = d.topFilaments[0].grams;
+      const pct  = maxG > 0 ? Math.round(f.grams/maxG*100) : 0;
+      return '<div style="margin-bottom:10px">' +
+        '<div style="display:flex;justify-content:space-between;font-size:12px">' +
+          '<span style="font-weight:500">' +
+            '<span class="dot" style="background:' + (f.color_hex||COLORS[i]) + '"></span>' + f.name +
+          '</span>' +
+          '<span style="color:#6b7280">' + f.grams + 'g</span>' +
+        '</div>' +
+        bar(pct, f.color_hex||COLORS[i]) +
+      '</div>';
+    }).join('') : '<p style="color:#9ca3af;font-size:12px">Aucun filament utilisé.</p>'}
+  </div>
+</div>
+
+${d.quotes.length || d.maintenance.length ? `
+<!-- Devis & Maintenance -->
+<div class="grid-2">
+  ${d.quotes.length ? `<div class="card">
+    <h3>📄 Devis du mois</h3>
+    <table>
+      <thead><tr><th>Client</th><th>Montant HT</th><th>Statut</th></tr></thead>
+      <tbody>
+        ${d.quotes.map(function(q) {
+          const statusMap = {draft:'Brouillon',sent:'Envoyé',accepted:'Accepté',refused:'Refusé'};
+          const colMap    = {accepted:'#16a34a',refused:'#dc2626',sent:'#2563eb',draft:'#6b7280'};
+          return '<tr><td>' + (q.client_name||'—') + '</td>' +
+            '<td style="font-weight:500">' + parseFloat(q.total_ht||0).toFixed(2) + ' €</td>' +
+            '<td><span class="badge" style="background:' + (colMap[q.status]||'#6b7280') + '22;color:' + (colMap[q.status]||'#6b7280') + '">' + (statusMap[q.status]||q.status) + '</span></td></tr>';
+        }).join('')}
+      </tbody>
+    </table>
+    ${d.caAccepted > 0 ? '<div style="margin-top:10px;text-align:right;font-size:12px">CA accepté : <strong>' + d.caAccepted.toFixed(2) + ' €</strong></div>' : ''}
+  </div>` : '<div></div>'}
+
+  ${d.maintenance.length ? `<div class="card">
+    <h3>🔧 Maintenance</h3>
+    <table>
+      <thead><tr><th>Imprimante</th><th>Type</th><th>Date</th></tr></thead>
+      <tbody>
+        ${d.maintenance.map(function(m) {
+          return '<tr><td>' + (m.printer_name||'—') + '</td>' +
+            '<td>' + (m.type||'').replace(/_/g,' ') + '</td>' +
+            '<td style="color:#6b7280">' + new Date(m.performed_at).toLocaleDateString('fr-FR') + '</td></tr>';
+        }).join('')}
+      </tbody>
+    </table>
+  </div>` : '<div></div>'}
+</div>` : ''}
+
+<!-- PAGE 2 : COMPARAISON IMPRIMANTES -->
+<div class="page-break">
+<h2>🖨 Comparaison des imprimantes</h2>
+${d.printerStats.length ? `
+<table>
+  <thead><tr>
+    <th>Imprimante</th>
+    <th style="text-align:right">Total</th>
+    <th style="text-align:right">Réussies</th>
+    <th style="text-align:right">Échouées</th>
+    <th style="text-align:right">Taux</th>
+    <th style="text-align:right">Heures</th>
+    <th style="text-align:right">Filament</th>
+    <th style="text-align:right">Note moy.</th>
+  </tr></thead>
+  <tbody>
+    ${d.printerStats.map(function(p, i) {
+      const COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#ec4899'];
+      const col    = COLORS[i % COLORS.length];
+      const rate   = p.count > 0 ? Math.round(p.success / p.count * 100) : null;
+      const rateCol = rate === null ? '#6b7280' : rate >= 90 ? '#16a34a' : rate >= 70 ? '#d97706' : '#dc2626';
+      return '<tr>' +
+        '<td style="font-weight:500">' +
+          '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + col + ';margin-right:6px;vertical-align:middle"></span>' +
+          p.name +
+        '</td>' +
+        '<td style="text-align:right;font-weight:600">' + (p.count||0) + '</td>' +
+        '<td style="text-align:right;color:#16a34a">' + (p.success||0) + '</td>' +
+        '<td style="text-align:right;color:' + (p.failed > 0 ? '#dc2626' : '#6b7280') + '">' + (p.failed||'—') + '</td>' +
+        '<td style="text-align:right;font-weight:600;color:' + rateCol + '">' + (rate !== null ? rate + '%' : '—') + '</td>' +
+        '<td style="text-align:right">' + p.hours + 'h</td>' +
+        '<td style="text-align:right">' + (p.grams||0) + 'g</td>' +
+        '<td style="text-align:right;color:#d97706">' + (p.avg_rating ? '★ ' + p.avg_rating : '—') + '</td>' +
+      '</tr>';
+    }).join('')}
+  </tbody>
+</table>
+
+<!-- Barres visuelles par imprimante -->
+<div style="margin-top:20px;display:grid;grid-template-columns:repeat(${Math.min(d.printerStats.length, 3)},1fr);gap:16px">
+  ${d.printerStats.slice(0,6).map(function(p, i) {
+    const COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#ec4899'];
+    const col    = COLORS[i % COLORS.length];
+    const maxCount = Math.max(...d.printerStats.map(function(x){ return x.count||0; }), 1);
+    const maxHours = Math.max(...d.printerStats.map(function(x){ return parseFloat(x.hours)||0; }), 1);
+    const maxGrams = Math.max(...d.printerStats.map(function(x){ return parseInt(x.grams)||0; }), 1);
+    const rate     = p.count > 0 ? Math.round(p.success / p.count * 100) : 0;
+    return '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;border-top:3px solid ' + col + '">' +
+      '<div style="font-size:13px;font-weight:600;margin-bottom:10px">' + p.name + '</div>' +
+      '<div style="font-size:11px;color:#6b7280;margin-bottom:3px">Impressions</div>' +
+      '<div style="font-size:18px;font-weight:700;margin-bottom:4px">' + (p.count||0) + '</div>' +
+      '<div style="height:5px;background:#e5e7eb;border-radius:3px;margin-bottom:10px">' +
+        '<div style="height:100%;width:' + Math.round((p.count||0)/maxCount*100) + '%;background:' + col + ';border-radius:3px"></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">' +
+        '<div>' +
+          '<div style="color:#6b7280">Taux réussite</div>' +
+          '<div style="font-weight:600;color:' + (rate>=90?'#16a34a':rate>=70?'#d97706':'#dc2626') + '">' + rate + '%</div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="color:#6b7280">Heures</div>' +
+          '<div style="font-weight:600">' + p.hours + 'h</div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="color:#6b7280">Filament</div>' +
+          '<div style="font-weight:600">' + (p.grams||0) + 'g</div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="color:#6b7280">Note moy.</div>' +
+          '<div style="font-weight:600;color:#d97706">' + (p.avg_rating ? '★ ' + p.avg_rating : '—') + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('')}
+</div>` : '<p style="color:#9ca3af">Aucune donnée imprimante ce mois.</p>'}
+</div>
+
+<!-- PAGE 3 : LISTE DES IMPRESSIONS -->
+<div class="page-break">
+<h2>📋 Liste des impressions</h2>
+${d.prints.length ? `
+<table>
+  <thead><tr><th>Nom</th><th>Imprimante</th><th>Filament</th><th>Durée</th><th>Consommé</th><th>Note</th><th>Statut</th></tr></thead>
+  <tbody>
+    ${d.prints.map(function(p) {
+      const statusMap = {done:'Réussie',failed:'Échouée',cancelled:'Annulée'};
+      const cls       = {done:'done',failed:'failed',cancelled:'cancelled'};
+      const dur       = p.actual_duration ? Math.floor(p.actual_duration/60)+'h'+(p.actual_duration%60>0?p.actual_duration%60+'min':'') : '—';
+      const stars     = p.rating ? '★'.repeat(p.rating)+'☆'.repeat(5-p.rating) : '—';
+      return '<tr>' +
+        '<td style="font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + p.name + '</td>' +
+        '<td style="color:#6b7280">' + (p.printer_name||'—') + '</td>' +
+        '<td>' + (p.filament_name ? '<span class="dot" style="background:' + (p.color_hex||'#ccc') + '"></span>' + p.filament_name : '—') + '</td>' +
+        '<td style="color:#6b7280">' + dur + '</td>' +
+        '<td style="color:#6b7280">' + (p.filament_used ? Math.round(p.filament_used)+'g' : '—') + '</td>' +
+        '<td style="color:#f59e0b;font-size:11px">' + stars + '</td>' +
+        '<td><span class="badge ' + (cls[p.status]||'') + '">' + (statusMap[p.status]||p.status) + '</span></td>' +
+      '</tr>';
+    }).join('')}
+  </tbody>
+</table>` : '<p style="color:#9ca3af">Aucune impression ce mois.</p>'}
+</div>
+
+${d.gallery.length ? `
+<!-- PAGE 4 : GALERIE -->
+<div class="page-break">
+<h2>🖼 Galerie — Meilleures réalisations (4★ et 5★)</h2>
+<div class="gallery-grid">
+  ${d.gallery.map(function(p) {
+    return '<div class="gallery-item">' +
+      '<img src="/api/prints/' + p.id + '/photo" alt="' + p.name + '" onerror="this.style.display=\'none\'">' +
+      '<div class="gallery-caption">' + p.name + '</div>' +
+      '<div class="gallery-stars">' + '★'.repeat(p.rating||0) + '</div>' +
+    '</div>';
+  }).join('')}
+</div>
+</div>` : ''}
+
+<!-- PIED DE PAGE -->
+<div class="footer">
+  <span>${d.appName} — Rapport ${capitalize(monthLabel)}</span>
+  <span>Généré le ${new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})}</span>
+</div>
+
+</body></html>`;
+
+  // Ouvrir dans une nouvelle fenêtre
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  // Déclencher l'impression après chargement des images
+  setTimeout(function() { win.print(); }, 800);
+}
+
+// ── Comparaison imprimantes ───────────────────────────────────────────────
+
+let _compareDays = 30;
+
+async function renderStatsCompare() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
+
+  let data;
+  try { data = await API.get('/stats/compare-printers?days=' + _compareDays); }
+  catch(e) { content.innerHTML = '<div style="color:var(--danger)">' + e.message + '</div>'; return; }
+
+  const { printers, maxTotal, maxHours, maxGrams } = data;
+  const COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#ec4899','#06b6d4','#84cc16'];
+
+  // Toggle période
+  const periodBtn = function(days, label) {
+    return '<button onclick="_compareDays=' + days + ';renderStatsCompare()" ' +
+      'style="padding:4px 14px;font-size:12px;border-radius:var(--radius);cursor:pointer;' +
+      'border:0.5px solid var(--border2);' +
+      'background:' + (_compareDays === days ? 'var(--accent)' : 'var(--bg3)') + ';' +
+      'color:' + (_compareDays === days ? '#fff' : 'var(--text2)') + '">' + label + '</button>';
+  };
+
+  let html =
+    '<div style="display:flex;gap:6px;margin-bottom:16px;align-items:center">' +
+      '<span style="font-size:12px;color:var(--text3)">Période :</span>' +
+      periodBtn(7,   '7 jours') +
+      periodBtn(30,  '30 jours') +
+      periodBtn(90,  '3 mois') +
+      periodBtn(365, '12 mois') +
+    '</div>';
+
+  if (!printers.length) {
+    content.innerHTML = html + '<div class="empty-state"><p>Aucune imprimante trouvée.</p></div>';
+    return;
+  }
+
+  // Trouver les "champions" par métrique
+  const best = {
+    rate:   printers.filter(function(p) { return p.rate !== null; }).sort(function(a,b) { return b.rate - a.rate; })[0]?.id,
+    total:  printers.sort(function(a,b) { return b.total - a.total; })[0]?.id,
+    rating: printers.filter(function(p) { return p.avg_rating; }).sort(function(a,b) { return b.avg_rating - a.avg_rating; })[0]?.id,
+  };
+
+  // ── Cartes par imprimante
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:24px">';
+
+  printers.forEach(function(p, i) {
+    const col     = COLORS[i % COLORS.length];
+    const rateCol = p.rate === null ? 'var(--text3)' : p.rate >= 90 ? '#10b981' : p.rate >= 70 ? '#f59e0b' : '#ef4444';
+    const isBest  = p.id === best.rate || p.id === best.total;
+
+    html += '<div class="card" style="border-top:3px solid ' + col + (isBest ? ';box-shadow:0 2px 12px ' + col + '33' : '') + '">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
+        '<span style="width:12px;height:12px;border-radius:50%;background:' + col + ';flex-shrink:0;display:inline-block"></span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + p.name + '</div>' +
+          (p.model ? '<div style="font-size:11px;color:var(--text3)">' + p.model + '</div>' : '') +
+        '</div>' +
+        (isBest ? '<span style="font-size:10px;padding:2px 8px;background:' + col + '22;color:' + col + ';border-radius:10px;font-weight:600">⭐ Meilleure</span>' : '') +
+      '</div>' +
+
+      // Métriques en grille 2×2
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
+
+        '<div style="background:var(--bg3);border-radius:var(--radius);padding:10px">' +
+          '<div style="font-size:20px;font-weight:700">' + (p.total || 0) + '</div>' +
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase">Impressions</div>' +
+          '<div style="height:4px;background:var(--border2);border-radius:2px;margin-top:6px">' +
+            '<div style="height:100%;width:' + (maxTotal > 0 ? Math.round(p.total/maxTotal*100) : 0) + '%;background:' + col + ';border-radius:2px"></div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="background:var(--bg3);border-radius:var(--radius);padding:10px">' +
+          '<div style="font-size:20px;font-weight:700;color:' + rateCol + '">' + (p.rate !== null ? p.rate + '%' : '—') + '</div>' +
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase">Taux réussite</div>' +
+          '<div style="height:4px;background:var(--border2);border-radius:2px;margin-top:6px">' +
+            '<div style="height:100%;width:' + (p.rate||0) + '%;background:' + rateCol + ';border-radius:2px"></div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="background:var(--bg3);border-radius:var(--radius);padding:10px">' +
+          '<div style="font-size:20px;font-weight:700">' + (p.hours || 0) + 'h</div>' +
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase">Heures</div>' +
+          '<div style="height:4px;background:var(--border2);border-radius:2px;margin-top:6px">' +
+            '<div style="height:100%;width:' + (maxHours > 0 ? Math.round((parseFloat(p.hours)||0)/maxHours*100) : 0) + '%;background:' + col + ';border-radius:2px"></div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="background:var(--bg3);border-radius:var(--radius);padding:10px">' +
+          '<div style="font-size:20px;font-weight:700">' + (p.grams || 0) + 'g</div>' +
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase">Filament</div>' +
+          '<div style="height:4px;background:var(--border2);border-radius:2px;margin-top:6px">' +
+            '<div style="height:100%;width:' + (maxGrams > 0 ? Math.round((parseInt(p.grams)||0)/maxGrams*100) : 0) + '%;background:' + col + ';border-radius:2px"></div>' +
+          '</div>' +
+        '</div>' +
+
+      '</div>' +
+
+      // Infos secondaires
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--text3)">' +
+        (p.avg_duration_label !== '—' ? '<span>⏱ Moy. ' + p.avg_duration_label + '</span>' : '') +
+        (p.avg_rating ? '<span style="color:#f59e0b">★ ' + p.avg_rating + '/5</span>' : '') +
+        (p.success ? '<span style="color:#10b981">✓ ' + p.success + ' réussies</span>' : '') +
+        (p.failed  ? '<span style="color:#ef4444">✗ ' + p.failed + ' échouées</span>' : '') +
+        (p.last_print ? '<span>Dernière : ' + new Date(p.last_print).toLocaleDateString('fr-FR') + '</span>' : '<span>Aucune impression</span>') +
+      '</div>' +
+
+    '</div>';
+  });
+  html += '</div>';
+
+  // ── Tableau comparatif
+  html += '<div class="card"><div class="card-header"><span class="card-title">Tableau comparatif</span></div>' +
+    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+    '<thead><tr style="background:var(--bg3)">' +
+      '<th style="padding:10px 12px;text-align:left;font-weight:500;color:var(--text3)">Imprimante</th>' +
+      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Total</th>' +
+      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:#10b981">Réussies</th>' +
+      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:#ef4444">Échouées</th>' +
+      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Taux</th>' +
+      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Heures</th>' +
+      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Filament</th>' +
+      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:#f59e0b">Note moy.</th>' +
+      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Durée moy.</th>' +
+    '</tr></thead><tbody>' +
+    printers.map(function(p, i) {
+      const col     = COLORS[i % COLORS.length];
+      const rateCol = p.rate === null ? 'var(--text3)' : p.rate >= 90 ? '#10b981' : p.rate >= 70 ? '#f59e0b' : '#ef4444';
+      return '<tr style="border-top:0.5px solid var(--border)">' +
+        '<td style="padding:10px 12px">' +
+          '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + col + ';margin-right:8px"></span>' +
+          '<span style="font-weight:500">' + p.name + '</span>' +
+          (p.model ? '<span style="font-size:11px;color:var(--text3);margin-left:6px">' + p.model + '</span>' : '') +
+        '</td>' +
+        '<td style="padding:10px 12px;text-align:right;font-weight:600">' + (p.total||0) + '</td>' +
+        '<td style="padding:10px 12px;text-align:right;color:#10b981">' + (p.success||0) + '</td>' +
+        '<td style="padding:10px 12px;text-align:right;color:' + (p.failed > 0 ? '#ef4444' : 'var(--text3)') + '">' + (p.failed||'—') + '</td>' +
+        '<td style="padding:10px 12px;text-align:right;font-weight:600;color:' + rateCol + '">' + (p.rate !== null ? p.rate+'%' : '—') + '</td>' +
+        '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + (p.hours||0) + 'h</td>' +
+        '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + (p.grams||0) + 'g</td>' +
+        '<td style="padding:10px 12px;text-align:right;color:#f59e0b">' + (p.avg_rating ? '★ '+p.avg_rating : '—') + '</td>' +
+        '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + (p.avg_duration_label||'—') + '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table></div></div>';
+
+  content.innerHTML = html;
 }

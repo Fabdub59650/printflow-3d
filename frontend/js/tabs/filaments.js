@@ -1,9 +1,22 @@
 let allFilaments  = [];
 let showArchived  = false;
-let _sortCol      = null;   // colonne de tri active
-let _sortDir      = 'asc';  // 'asc' | 'desc'
-let _filterQuery  = '';     // filtre recherche
-let _filterMat    = '';     // filtre matière actif
+let _sortCol      = null;
+let _sortDir      = 'asc';
+let _filterQuery  = '';
+let _filterMat    = '';
+
+// Filtres avancés filaments
+let _filAdvanced = {
+  finish:     '',
+  special:    '',
+  diameter:   '',
+  location:   '',
+  nfc:        '',   // 'with' | 'without' | ''
+  stock_min:  '',
+  stock_max:  '',
+  pct_max:    '',   // filtre "stock faible" %
+};
+let _filAdvancedOpen = false;
 
 // ── Colonnes configurables ────────────────────────────────
 const FILAMENT_COLS = [
@@ -44,19 +57,47 @@ function sortFilaments(filaments) {
 
 function filterFilaments(filaments) {
   let result = filaments;
-  // Filtre matière
+
+  // Filtres rapides
   if (_filterMat) result = result.filter(function(f){ return f.material === _filterMat; });
-  // Filtre texte
   if (_filterQuery) {
     const q = _filterQuery.toLowerCase();
     result = result.filter(function(f) {
-      return (f.name      && f.name.toLowerCase().includes(q)) ||
-             (f.brand     && f.brand.toLowerCase().includes(q)) ||
-             (f.material  && f.material.toLowerCase().includes(q)) ||
-             (f.color_name && f.color_name.toLowerCase().includes(q));
+      return (f.name       && f.name.toLowerCase().includes(q)) ||
+             (f.brand      && f.brand.toLowerCase().includes(q)) ||
+             (f.material   && f.material.toLowerCase().includes(q)) ||
+             (f.color_name && f.color_name.toLowerCase().includes(q)) ||
+             (f.spool_number && f.spool_number.toLowerCase().includes(q)) ||
+             (f.notes      && f.notes.toLowerCase().includes(q));
     });
   }
+
+  // Filtres avancés
+  const A = _filAdvanced;
+  if (A.finish)   result = result.filter(function(f) { return f.finish_option === A.finish; });
+  if (A.special)  result = result.filter(function(f) { return f.special_option === A.special; });
+  if (A.diameter) result = result.filter(function(f) { return String(f.diameter) === A.diameter; });
+  if (A.location) {
+    const lq = A.location.toLowerCase();
+    result = result.filter(function(f) { return f.location && f.location.toLowerCase().includes(lq); });
+  }
+  if (A.nfc === 'with')    result = result.filter(function(f) { return !!f.nfc_uid; });
+  if (A.nfc === 'without') result = result.filter(function(f) { return !f.nfc_uid; });
+  if (A.stock_min !== '') result = result.filter(function(f) { return parseFloat(f.weight_remaining||0) >= parseFloat(A.stock_min); });
+  if (A.stock_max !== '') result = result.filter(function(f) { return parseFloat(f.weight_remaining||0) <= parseFloat(A.stock_max); });
+  if (A.pct_max !== '') {
+    const maxPct = parseFloat(A.pct_max);
+    result = result.filter(function(f) {
+      const p = f.weight_total > 0 ? (f.weight_remaining / f.weight_total * 100) : 0;
+      return p <= maxPct;
+    });
+  }
+
   return result;
+}
+
+function countActiveFilAdvanced() {
+  return Object.values(_filAdvanced).filter(function(v) { return v !== ''; }).length;
 }
 
 function setMaterialFilter(mat) {
@@ -152,6 +193,7 @@ const SPECIAL_OPTIONS = ['—','Renforcé fibre carbone','Renforcé fibre verre'
 
 async function renderFilaments() {
   document.getElementById('page-title').textContent = 'Filaments';
+  const activeAdv = countActiveFilAdvanced();
   document.getElementById('topbar-actions').innerHTML =
     `${window._spoolmanEnabled ? '<button class="btn btn-sm" onclick="syncSpoolman()" style="margin-right:4px">↻ Sync Spoolman</button>' : ''}
      <button class="btn btn-sm" onclick="openWeighingModal()" style="margin-right:4px">⚖ Pesée</button>
@@ -162,11 +204,19 @@ async function renderFilaments() {
          style="padding:5px 28px 5px 10px;font-size:12px;width:160px;border-radius:var(--radius)">
        ${_filterQuery ? '<button onclick="setFilamentFilter(\"\")" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px">✕</button>' : ''}
      </div>
+     <button onclick="toggleFilAdvanced()" style="display:inline-flex;align-items:center;gap:6px;
+       padding:5px 12px;font-size:12px;border-radius:var(--radius);cursor:pointer;margin-right:4px;
+       border:0.5px solid ${activeAdv > 0 ? 'var(--accent)' : 'var(--border2)'};
+       background:${activeAdv > 0 ? 'var(--accent-bg)' : 'var(--bg3)'};
+       color:${activeAdv > 0 ? 'var(--accent)' : 'var(--text2)'}">
+       🔍 Filtres${activeAdv > 0 ? ' <span style="background:var(--accent);color:#fff;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700">' + activeAdv + '</span>' : ''}
+     </button>
      <button class="btn btn-sm" id="btn-archived" onclick="toggleShowArchived()"
        style="margin-right:4px;opacity:${showArchived?'1':'0.5'}">
        ${showArchived ? '● Archivés visibles' : '○ Archivés masqués'}
      </button>
      <button class="btn btn-sm" onclick="openColPicker()" style="margin-right:4px" title="Choisir les colonnes">⚙ Colonnes</button>
+     <button class="btn btn-sm" onclick="openLabelEditor()" style="margin-right:4px" title="Générateur d'étiquettes">🏷 Étiquettes</button>
      <button class="btn btn-sm" onclick="openImportCSV()" style="margin-right:4px" title="Importer depuis CSV">↑ CSV</button>
      <button class="btn btn-sm" onclick="exportFilamentsCSV()" style="margin-right:4px" title="Exporter en CSV">↓ CSV</button>
      <button class="btn btn-sm" onclick="exportFilamentsPDF()" style="margin-right:4px" title="Exporter en PDF">↓ PDF</button>
@@ -174,6 +224,89 @@ async function renderFilaments() {
   document.getElementById('content').innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
   allFilaments = await API.get('/filaments' + (showArchived ? '?archived=1' : ''));
   renderFilamentGrid();
+}
+
+function toggleFilAdvanced() {
+  _filAdvancedOpen = !_filAdvancedOpen;
+  renderFilamentGrid();
+  renderFilaments(); // rebind topbar button color
+}
+
+function resetFilAdvanced() {
+  _filAdvanced = { finish:'', special:'', diameter:'', location:'', nfc:'', stock_min:'', stock_max:'', pct_max:'' };
+  _filAdvancedOpen = false;
+  renderFilaments();
+}
+
+function renderFilAdvancedPanel() {
+  if (!_filAdvancedOpen) return '';
+  const A = _filAdvanced;
+
+  const finishes  = ['Standard','Silk','Matte','Transparent','Fluorescent','Glow','Galaxy','Marble','Wood','Metal','Carbon'];
+  const specials  = ['—','Conducteur','Magnétique','Antibactérien','Ignifugé','Flexible','Soluble'];
+
+  return '<div style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);' +
+    'padding:14px;margin-bottom:12px">' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:10px">' +
+
+    // Finition
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Finition</label>' +
+    '<select onchange="_filAdvanced.finish=this.value;renderFilamentGrid()" style="width:100%;font-size:12px">' +
+    '<option value="">Toutes</option>' +
+    finishes.map(function(o) { return '<option value="' + o + '"' + (A.finish===o?' selected':'') + '>' + o + '</option>'; }).join('') +
+    '</select></div>' +
+
+    // Propriété spéciale
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Propriété spéciale</label>' +
+    '<select onchange="_filAdvanced.special=this.value;renderFilamentGrid()" style="width:100%;font-size:12px">' +
+    '<option value="">Toutes</option>' +
+    specials.map(function(o) { return '<option value="' + o + '"' + (A.special===o?' selected':'') + '>' + o + '</option>'; }).join('') +
+    '</select></div>' +
+
+    // Diamètre
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Diamètre</label>' +
+    '<select onchange="_filAdvanced.diameter=this.value;renderFilamentGrid()" style="width:100%;font-size:12px">' +
+    '<option value="">Tous</option>' +
+    ['1.75','2.85'].map(function(d) { return '<option value="' + d + '"' + (A.diameter===d?' selected':'') + '>' + d + ' mm</option>'; }).join('') +
+    '</select></div>' +
+
+    // NFC
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Puce NFC</label>' +
+    '<select onchange="_filAdvanced.nfc=this.value;renderFilamentGrid()" style="width:100%;font-size:12px">' +
+    '<option value="">Toutes</option>' +
+    '<option value="with"' + (A.nfc==='with'?' selected':'') + '>Avec puce</option>' +
+    '<option value="without"' + (A.nfc==='without'?' selected':'') + '>Sans puce</option>' +
+    '</select></div>' +
+
+    // Stock min
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Stock min (g)</label>' +
+    '<input type="number" value="' + (A.stock_min||'') + '" placeholder="ex: 100" ' +
+    'oninput="_filAdvanced.stock_min=this.value;renderFilamentGrid()" style="width:100%;font-size:12px"></div>' +
+
+    // Stock max
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Stock max (g)</label>' +
+    '<input type="number" value="' + (A.stock_max||'') + '" placeholder="ex: 800" ' +
+    'oninput="_filAdvanced.stock_max=this.value;renderFilamentGrid()" style="width:100%;font-size:12px"></div>' +
+
+    // Stock faible %
+    '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Stock faible — max %</label>' +
+    '<select onchange="_filAdvanced.pct_max=this.value;renderFilamentGrid()" style="width:100%;font-size:12px">' +
+    '<option value="">Tous</option>' +
+    ['10','15','20','25','50'].map(function(p) { return '<option value="' + p + '"' + (A.pct_max===p?' selected':'') + '>≤ ' + p + '%</option>'; }).join('') +
+    '</select></div>' +
+
+    // Emplacement (seulement si activé dans les paramètres)
+    (window._showLocations ? '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Emplacement</label>' +
+    '<input type="text" value="' + (A.location||'') + '" placeholder="ex: Tiroir 2" ' +
+    'oninput="_filAdvanced.location=this.value;renderFilamentGrid()" style="width:100%;font-size:12px"></div>' : '') +
+
+    '</div>' +
+    '<div style="display:flex;gap:8px;align-items:center">' +
+      '<span id="fil-adv-count" style="font-size:12px;color:var(--text3)"></span>' +
+      '<button onclick="resetFilAdvanced()" style="font-size:12px;padding:4px 10px;border-radius:var(--radius);' +
+        'border:0.5px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">↺ Réinitialiser</button>' +
+    '</div>' +
+  '</div>';
 }
 
 function setFilamentFilter(q) {
@@ -192,11 +325,12 @@ async function toggleShowArchived() {
 function renderFilamentGrid() {
   const content = document.getElementById('content');
   if (!allFilaments.length) {
-    content.innerHTML = '<div class="empty-state"><p>Aucun filament en stock.</p></div>';
+    content.innerHTML = renderFilAdvancedPanel() + '<div class="empty-state"><p>Aucun filament en stock.</p></div>';
     return;
   }
-  // Appliquer filtre et tri
-  const displayed = sortFilaments(filterFilaments(allFilaments));
+  const filtered   = filterFilaments(allFilaments);
+  const displayed  = sortFilaments(filtered);
+  const totalCount = filtered.length;
 
   // Réordonner : les bobines partielles apparaissent juste après leur parent
   const ordered = [];
@@ -217,7 +351,19 @@ function renderFilamentGrid() {
     grouped[f.material].push(f);
   });
 
-  content.innerHTML = Object.entries(grouped).map(([mat, filaments]) => `
+  // Mettre à jour le compteur dans le panneau si visible
+  setTimeout(function() {
+    const el = document.getElementById('fil-adv-count');
+    if (el) el.textContent = totalCount + ' bobine' + (totalCount !== 1 ? 's' : '') + ' trouvée' + (totalCount !== 1 ? 's' : '');
+  }, 0);
+
+  if (!totalCount) {
+    content.innerHTML = renderFilAdvancedPanel() +
+      '<div class="empty-state"><p>Aucun filament ne correspond aux filtres.</p></div>';
+    return;
+  }
+
+  content.innerHTML = renderFilAdvancedPanel() + Object.entries(grouped).map(([mat, filaments]) => `
     <div class="card">
       <div class="card-header" style="cursor:pointer" onclick="setMaterialFilter('${mat}')"
            title="${_filterMat===mat ? 'Cliquer pour afficher toutes les matières' : 'Cliquer pour filtrer sur ' + mat}">
@@ -315,6 +461,7 @@ function renderFilamentGrid() {
                 <button class="btn btn-sm" title="${f.archived?'Désarchiver':'Archiver'}"
                   onclick="quickToggleArchive(${f.id},${f.archived?1:0})"
                   style="font-size:11px;opacity:${f.archived?'1':'0.6'}">${f.archived?'↑':'📦'}</button>
+                <button class="btn btn-sm" title="QR Code" onclick="openFilamentQR(${f.id})">QR</button>
                 <button class="btn btn-sm" onclick="openFilamentForm(${f.id})">✏</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteFilament(${f.id})">✕</button>
               </div></td>
@@ -1315,4 +1462,153 @@ async function doImportCSV() {
     toast('Erreur import : ' + e.message, 'error');
     if (btn) { btn.disabled = false; btn.textContent = 'Importer'; }
   }
+}
+
+// ── QR Code bobine ─────────────────────────────────────────────────────────
+
+function openFilamentQR(id) {
+  const f = allFilaments.find(function(x) { return x.id === id; });
+  if (!f) return;
+
+  // URL qui ouvre directement la fiche filament dans PrintFlow
+  const url = window.location.origin + '/#filament/' + id;
+
+  const pct = f.weight_total > 0 ? Math.round(f.weight_remaining / f.weight_total * 100) : 0;
+  const barColor = pct < 15 ? '#ef4444' : pct < 25 ? '#f59e0b' : '#10b981';
+
+  const optLabel = [
+    f.finish_option && f.finish_option !== 'Standard' ? f.finish_option : null,
+    f.special_option && f.special_option !== '—'      ? f.special_option : null,
+  ].filter(Boolean).join(' · ');
+
+  openModal(`
+    <div style="display:flex;gap:24px;align-items:flex-start">
+
+      <!-- QR Code -->
+      <div style="flex-shrink:0;text-align:center">
+        <div id="qr-container" style="background:#fff;padding:12px;border-radius:var(--radius);
+          border:0.5px solid var(--border2);display:inline-block"></div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px">Scanner pour ouvrir la fiche</div>
+      </div>
+
+      <!-- Infos bobine -->
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <span style="width:18px;height:18px;border-radius:50%;background:${f.color_hex||'#ccc'};
+            flex-shrink:0;display:inline-block;border:1px solid rgba(0,0,0,0.1)"></span>
+          <span style="font-size:16px;font-weight:600">${f.name}</span>
+        </div>
+
+        <table style="width:100%;font-size:13px;border-collapse:collapse">
+          ${f.brand ? `<tr><td style="color:var(--text3);padding:4px 0;width:40%">Marque</td><td style="font-weight:500">${f.brand}</td></tr>` : ''}
+          <tr><td style="color:var(--text3);padding:4px 0">Matière</td>
+            <td style="font-weight:500">${f.material}${f.elegoo_subtype ? ' · '+f.elegoo_subtype : ''}${optLabel ? ' · '+optLabel : ''}</td></tr>
+          ${f.color_name ? `<tr><td style="color:var(--text3);padding:4px 0">Couleur</td><td>${f.color_name}</td></tr>` : ''}
+          <tr><td style="color:var(--text3);padding:4px 0">Diamètre</td><td>${f.diameter||1.75} mm</td></tr>
+          <tr><td style="color:var(--text3);padding:4px 0">Stock</td>
+            <td>
+              <span style="font-weight:500">${Math.round(f.weight_remaining)}g</span>
+              <span style="color:var(--text3)"> / ${f.weight_total}g</span>
+              <span style="margin-left:6px;font-size:11px;color:${barColor};font-weight:600">(${pct}%)</span>
+            </td></tr>
+          <tr><td style="color:var(--text3);padding:4px 0">Buse</td>
+            <td>${f.temp_nozzle_min||'—'}–${f.temp_nozzle_max||'—'} °C</td></tr>
+          <tr><td style="color:var(--text3);padding:4px 0">Plateau</td>
+            <td>${f.temp_bed_min||'—'}–${f.temp_bed_max||'—'} °C</td></tr>
+          ${f.spool_number ? `<tr><td style="color:var(--text3);padding:4px 0">N° bobine</td><td>${f.spool_number}</td></tr>` : ''}
+          ${f.location ? `<tr><td style="color:var(--text3);padding:4px 0">Emplacement</td><td>${f.location}</td></tr>` : ''}
+        </table>
+      </div>
+    </div>
+
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn" onclick="closeModal()">Fermer</button>
+      <button class="btn btn-sm" onclick="printFilamentLabel(${id})"
+        style="background:var(--bg3);border:0.5px solid var(--border2)">🖨 Imprimer l'étiquette</button>
+    </div>
+  `, 'QR Code — ' + f.name);
+
+  // Générer le QR code après l'ouverture de la modale
+  setTimeout(function() {
+    const container = document.getElementById('qr-container');
+    if (!container) return;
+    try {
+      new QRCode(container, {
+        text:           url,
+        width:          150,
+        height:         150,
+        colorDark:      '#000000',
+        colorLight:     '#ffffff',
+        correctLevel:   QRCode.CorrectLevel.M,
+      });
+    } catch(e) {
+      container.innerHTML = '<div style="font-size:11px;color:var(--danger)">QR Code indisponible</div>';
+    }
+  }, 100);
+}
+
+function printFilamentLabel(id) {
+  const f = allFilaments.find(function(x) { return x.id === id; });
+  if (!f) return;
+
+  const url    = window.location.origin + '/#filament/' + id;
+  const pct    = f.weight_total > 0 ? Math.round(f.weight_remaining / f.weight_total * 100) : 0;
+  const optLabel = [
+    f.finish_option && f.finish_option !== 'Standard' ? f.finish_option : null,
+    f.special_option && f.special_option !== '—'      ? f.special_option : null,
+  ].filter(Boolean).join(' · ');
+
+  const win = window.open('', '_blank', 'width=400,height=300');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="utf-8">
+    <title>Étiquette — ${f.name}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+    <style>
+      * { margin:0;padding:0;box-sizing:border-box }
+      body { font-family:system-ui,sans-serif;padding:16px;background:#fff;color:#000 }
+      .label { display:flex;gap:14px;align-items:center;
+               border:1.5px solid #000;border-radius:6px;padding:12px;
+               width:fit-content;min-width:240px }
+      .qr { flex-shrink:0 }
+      .info { flex:1 }
+      .name { font-size:14px;font-weight:700;margin-bottom:6px }
+      .dot  { width:12px;height:12px;border-radius:50%;background:${f.color_hex||'#ccc'};
+               display:inline-block;margin-right:6px;vertical-align:middle;
+               border:1px solid rgba(0,0,0,0.15) }
+      .row  { font-size:11px;margin-bottom:2px;color:#333 }
+      .row strong { color:#000 }
+      .stock-bar { height:4px;background:#eee;border-radius:2px;margin-top:4px }
+      .stock-fill { height:100%;border-radius:2px;
+                    background:${pct < 15 ? '#ef4444' : pct < 25 ? '#f59e0b' : '#10b981'};
+                    width:${pct}% }
+      @media print {
+        body { padding:4px }
+        @page { margin:4mm }
+      }
+    </style>
+  </head><body>
+    <div class="label">
+      <div class="qr" id="qr"></div>
+      <div class="info">
+        <div class="name"><span class="dot"></span>${f.name}</div>
+        ${f.brand ? `<div class="row"><strong>${f.brand}</strong></div>` : ''}
+        <div class="row">${f.material}${f.elegoo_subtype ? ' · '+f.elegoo_subtype : ''}${optLabel ? ' · '+optLabel : ''} — ${f.diameter||1.75}mm</div>
+        <div class="row">🌡 Buse ${f.temp_nozzle_min}–${f.temp_nozzle_max}°C · Plateau ${f.temp_bed_min}–${f.temp_bed_max}°C</div>
+        <div class="row" style="margin-top:4px">
+          Stock : <strong>${Math.round(f.weight_remaining)}g / ${f.weight_total}g (${pct}%)</strong>
+        </div>
+        <div class="stock-bar"><div class="stock-fill"></div></div>
+        ${f.spool_number ? `<div class="row" style="margin-top:4px">N° ${f.spool_number}</div>` : ''}
+        ${f.location ? `<div class="row">📍 ${f.location}</div>` : ''}
+      </div>
+    </div>
+    <script>
+      new QRCode(document.getElementById('qr'), {
+        text: '${url}', width:90, height:90,
+        colorDark:'#000', colorLight:'#fff', correctLevel:QRCode.CorrectLevel.M
+      });
+      setTimeout(function(){ window.print(); }, 500);
+    <\/script>
+  </body></html>`);
+  win.document.close();
 }

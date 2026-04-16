@@ -1,6 +1,6 @@
 {
   "name": "printflow",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "PrintFlow \u2014 Gestion impressions 3D",
   "main": "server.js",
   "scripts": {

@@ -172,15 +172,24 @@ window._projectsEnabled        = true;  // activé par défaut
   try { checkAuth(); } catch(_) {}
 
   // Démarrer sur le dashboard ou sur la cible du hash si présent
-  const hash = window.location.hash; // ex: #library/42
+  const hash = window.location.hash; // ex: #library/42 ou #filament/5
   if (hash && hash.startsWith('#library/')) {
     const objectId = parseInt(hash.replace('#library/', ''));
     if (objectId) {
       switchTab('library');
-      // Ouvrir la fiche objet après le rendu de l'onglet
       setTimeout(function() {
         if (typeof openObjectDetail === 'function') openObjectDetail(objectId);
       }, 600);
+    } else {
+      switchTab('dashboard');
+    }
+  } else if (hash && hash.startsWith('#filament/')) {
+    const filamentId = parseInt(hash.replace('#filament/', ''));
+    if (filamentId) {
+      switchTab('filaments');
+      setTimeout(function() {
+        if (typeof openFilamentForm === 'function') openFilamentForm(filamentId);
+      }, 800);
     } else {
       switchTab('dashboard');
     }
@@ -354,3 +363,40 @@ function toggleShortcutsHelp() {
   // Fermeture automatique après 5s
   setTimeout(function() { if (panel.parentNode) panel.remove(); }, 5000);
 }
+
+// ── Toggle thème clair/sombre ─────────────────────────────────────────────
+function toggleDarkMode() {
+  const root    = document.documentElement;
+  const current = root.getAttribute('data-color-scheme');
+  const next    = current === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-color-scheme', next);
+
+  // Mettre à jour l'icône
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.textContent = next === 'dark' ? '☀️' : '🌙';
+
+  // Sauvegarder la préférence (override le mode auto)
+  try { API.put('/settings', { color_mode: next }); } catch(_) {}
+}
+
+// Initialiser l'icône au chargement selon le thème actif
+(function initThemeBtn() {
+  function update() {
+    const btn = document.getElementById('theme-toggle-btn');
+    if (!btn) return;
+    const isDark = document.documentElement.getAttribute('data-color-scheme') === 'dark' ||
+      (!document.documentElement.getAttribute('data-color-scheme') &&
+       window.matchMedia('(prefers-color-scheme: dark)').matches);
+    btn.textContent = isDark ? '☀️' : '🌙';
+    btn.title = isDark ? 'Passer en mode clair' : 'Passer en mode sombre';
+  }
+  // Observer les changements de thème
+  const observer = new MutationObserver(update);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-scheme'] });
+  // Init après chargement
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', update);
+  } else {
+    setTimeout(update, 100);
+  }
+})();
