@@ -252,7 +252,7 @@ function renderPrintsTable() {
   wrap.innerHTML =
     '<table><thead><tr>' +
       '<th></th><th>Projet</th><th>Imprimante</th><th>Filament</th><th>Note</th>' +
-      '<th>Durée</th><th>Consommé</th><th>Date</th><th>Statut</th><th></th>' +
+      '<th>Durée</th><th>Consommé</th><th>Coût réel</th><th>Date</th><th>Statut</th><th></th>' +
     '</tr></thead><tbody>' +
     data.map(function(p) {
       const thumbHtml = p.photo_path
@@ -269,6 +269,9 @@ function renderPrintsTable() {
         '<td>' + renderStars(p.rating, p.id) + '</td>' +
         '<td>' + fmtDuration(p.actual_duration || p.estimated_duration) + '</td>' +
         '<td>' + (p.filament_used ? p.filament_used + 'g' : '—') + '</td>' +
+        '<td style="color:' + (p.real_cost ? 'var(--success)' : 'var(--text3)') + '">' +
+          (p.real_cost ? parseFloat(p.real_cost).toFixed(2) + ' €' : '—') +
+        '</td>' +
         '<td style="white-space:nowrap">' + fmtDateTime(p.created_at) + '</td>' +
         '<td>' + statusBadge(p.status) + '</td>' +
         '<td><div class="td-actions">' +
@@ -280,6 +283,28 @@ function renderPrintsTable() {
       '</tr>';
     }).join('') +
     '</tbody></table>';
+}
+
+function costBox(label, value, color) {
+  return '<div style="background:var(--bg2);border-radius:var(--radius);padding:10px;text-align:center">' +
+    '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px">' + label + '</div>' +
+    '<div style="font-size:16px;font-weight:700;color:' + color + '">' + value + '</div>' +
+  '</div>';
+}
+
+async function recalcPrintCost(id) {
+  const btn = document.getElementById('btn-recalc-' + id);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const r = await API.patch('/prints/' + id + '/recalc-cost', {});
+    if (r.ok) {
+      toast('Coût réel calculé : ' + r.real_cost.toFixed(2) + ' €', 'success');
+      openPrintDetail(id); // Recharger la fiche
+    }
+  } catch(e) {
+    toast('Erreur : ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Recalculer'; }
+  }
 }
 
 async function openPrintDetail(id) {
@@ -357,6 +382,37 @@ async function openPrintDetail(id) {
         '<div class="stat-row"><span class="stat-label">Temp. plateau</span><span class="stat-val">' + (p.bed_temp ? p.bed_temp+'°C' : '—') + '</span></div>' +
       '</div>' +
     '</div>' +
+
+    // ── Coût réel ──────────────────────────────────────────────────────────
+    (p.status === 'done' ? (function() {
+      const hasRealCost = p.real_cost !== null && p.real_cost !== undefined;
+      const canCalc     = p.filament_used || p.actual_duration;
+      const rc  = hasRealCost ? parseFloat(p.real_cost) : null;
+      const rfc = hasRealCost ? parseFloat(p.real_filament_cost || 0) : null;
+      const rec = hasRealCost ? parseFloat(p.real_electricity_cost || 0) : null;
+
+      return '<div style="background:var(--bg3);border-radius:var(--radius);padding:14px;margin-bottom:12px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em">Coût réel</div>' +
+          (canCalc ? '<button class="btn btn-sm" onclick="recalcPrintCost(' + p.id + ')" id="btn-recalc-' + p.id + '">Recalculer</button>' : '') +
+        '</div>' +
+        (hasRealCost ? (
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">' +
+            costBox('Matière',     rfc !== null ? rfc.toFixed(3) + ' €' : '—', '#3b82f6') +
+            costBox('Électricité', rec !== null ? rec.toFixed(3) + ' €' : '—', '#8b5cf6') +
+            costBox('Total réel',  rc  !== null ? rc.toFixed(2)  + ' €' : '—', '#10b981') +
+          '</div>'
+        ) : (
+          canCalc
+            ? '<div style="font-size:13px;color:var(--text3);text-align:center;padding:8px 0">' +
+                'Coût non calculé — <a href="#" onclick="recalcPrintCost(' + p.id + ');return false" style="color:var(--accent)">Calculer maintenant</a>' +
+              '</div>'
+            : '<div style="font-size:13px;color:var(--text3);text-align:center;padding:8px 0">' +
+                'Renseignez le filament consommé et la durée réelle pour calculer le coût.' +
+              '</div>'
+        )) +
+      '</div>';
+    })() : '') +
     (p.notes ? '<div style="margin-bottom:12px"><div class="form-label" style="margin-bottom:6px">Notes</div><div style="font-size:13px;color:var(--text2);background:var(--bg3);padding:10px;border-radius:var(--radius)">' + p.notes + '</div></div>' : '') +
     '<div style="margin-bottom:12px;display:flex;align-items:center;gap:10px">' +
       '<div class="form-label" style="margin:0">Note</div>' +

@@ -4,6 +4,7 @@ let allQuotes = [];
 let _quoteFilaments = [];
 let _quotePrinters  = [];
 let _quoteSettings  = {};
+let _quoteElecRate  = 0.20;
 
 const QUOTE_STATUS = {
   draft:    { label: 'Brouillon', color: '#6b7280', bg: 'var(--bg3)' },
@@ -170,14 +171,15 @@ async function saveQuoteHeader(id) {
 // ── Détail devis avec gestion des lignes ──────────────────────────────────
 
 async function openQuoteDetail(id) {
-  // Charger les données nécessaires
-  const [q, filaments, printers] = await Promise.all([
+  const [q, filaments, printers, settings] = await Promise.all([
     API.get('/quotes/' + id),
     API.get('/filaments'),
     API.get('/printers'),
+    API.get('/settings'),
   ]);
-  _quoteFilaments = filaments;
-  _quotePrinters  = printers;
+  _quoteFilaments    = filaments;
+  _quotePrinters     = printers;
+  _quoteElecRate     = parseFloat(settings.quote_electricity_rate || 0.20);
 
   renderQuoteDetailModal(q);
 }
@@ -286,24 +288,25 @@ function renderQuoteDetailModal(q) {
 }
 
 function renderItemRow(item, quoteId) {
-  // Calcul marge réelle si impression liée
   let realCostHtml = '—', marginHtml = '—', printLinkHtml = '';
 
   if (item.print_id) {
     const estimated = parseFloat(item.qty) * parseFloat(item.unit_price || 0);
+
+    // Calculer le coût réel complet si les données d'impression sont disponibles
     if (item.real_filament_g !== null && item.real_filament_g !== undefined) {
       const fil_cost  = (parseFloat(item.real_filament_g) / 1000) * parseFloat(item.filament_price || 0);
-      // électricité approximée depuis durée réelle
-      const real_cost = fil_cost; // simplifié — le calcul complet est dans /profitability
-      realCostHtml = '~' + fil_cost.toFixed(2) + ' €';
-    }
-    const margin = item.margin_real !== undefined && item.margin_real !== null
-      ? parseFloat(item.margin_real) : null;
-    if (margin !== null) {
-      const col = margin >= 0 ? 'var(--success)' : 'var(--danger)';
-      marginHtml = '<span style="color:' + col + ';font-weight:600">' +
+      const elec_cost = (parseFloat(item.real_duration_min || 0) / 60) *
+                        (parseFloat(item.power_consumption || 0) / 1000) * _quoteElecRate;
+      const real_cost = fil_cost + elec_cost;
+      const margin    = estimated - real_cost;
+      const col       = margin >= 0 ? 'var(--success)' : 'var(--danger)';
+
+      realCostHtml = real_cost.toFixed(2) + ' €';
+      marginHtml   = '<span style="color:' + col + ';font-weight:600">' +
         (margin >= 0 ? '+' : '') + margin.toFixed(2) + ' €</span>';
     }
+
     printLinkHtml =
       '<span style="font-size:11px;color:var(--success)">✓ ' + (item.print_name || '#' + item.print_id) + '</span>' +
       '<br><button class="btn btn-sm" onclick="unlinkPrint(' + quoteId + ',' + item.id + ')" ' +

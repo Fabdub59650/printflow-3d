@@ -147,7 +147,12 @@ async function collectReportData() {
     SELECT COUNT(*) AS new_objects FROM library_objects WHERE created_at >= ?
   `, [sinceStr]);
 
-  // ── Devis de la semaine ──────────────────────────────────────────────────
+  const nextWeek = new Date(now);
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  const nextWeekStr = nextWeek.toISOString().slice(0, 19).replace('T', ' ');
+  const nowStr = now.toISOString().slice(0, 19).replace('T', ' ');
+
+  // ── Dévis de la semaine ──────────────────────────────────────────────────
   const [[quotesStats]] = await db.query(`
     SELECT COUNT(*) AS total,
            SUM(status='accepted') AS accepted,
@@ -159,17 +164,75 @@ async function collectReportData() {
   `, [sinceStr]);
 
   const [recentQuotes] = await db.query(`
-    SELECT client_name, description, total_ht, status, created_at
-    FROM quotes WHERE created_at >= ?
-    ORDER BY created_at DESC LIMIT 5
+    SELECT q.client_name, q.total_ht, q.status, q.created_at,
+           COUNT(qi.id) AS item_count
+    FROM quotes q
+    LEFT JOIN quote_items qi ON qi.quote_id = q.id
+    WHERE q.created_at >= ?
+    GROUP BY q.id
+    ORDER BY q.created_at DESC LIMIT 5
   `, [sinceStr]);
 
-  // ── Planning de la semaine à venir ───────────────────────────────────────
-  const nextWeek = new Date(now);
-  nextWeek.setDate(nextWeek.getDate() + 7);
-  const nextWeekStr = nextWeek.toISOString().slice(0, 19).replace('T', ' ');
-  const nowStr = now.toISOString().slice(0, 19).replace('T', ' ');
+  // ── Marge réelle des devis acceptés avec impressions liées ───────────────
+  const [[marginStats]] = await db.query(`
+    SELECT
+      COUNT(DISTINCT qi.quote_id)                              AS quotes_with_links,
+      ROUND(SUM(qi.qty * qi.unit_price), 2)                   AS total_estimated,
+      ROUND(SUM(pr.filament_used * f.price / 1000), 2)        AS total_real_cost
+    FROM quote_items qi
+    JOIN quotes q    ON q.id  = qi.quote_id
+    JOIN prints pr   ON pr.id = qi.print_id
+    LEFT JOIN filaments f ON f.id = qi.filament_id
+    WHERE q.status = 'accepted' AND qi.print_id IS NOT NULL
+  `).catch(function(){ return [[null]]; });
 
+  // ── Activité par imprimante ───────────────────────────────────────────────
+  const [printerStats] = await db.query(`
+    SELECT pr.name AS printer_name,
+           COUNT(*) AS total,
+           SUM(p.status='done') AS success,
+           ROUND(SUM(p.actual_duration)/60, 1) AS hours,
+           ROUND(SUM(p.filament_used), 0) AS filament_g
+    FROM prints p
+    JOIN printers pr ON pr.id = p.printer_id
+    WHERE p.created_at >= ? AND p.status IN ('done','failed','cancelled')
+    GROUP BY pr.id
+    ORDER BY hours DESC
+  `, [sinceStr]);
+
+  // ── Consommation par matière ──────────────────────────────────────────────
+  const [materialStats] = await db.query(`
+    SELECT f.material,
+           ROUND(SUM(src.used_g), 0) AS total_g
+    FROM (
+      SELECT pf.filament_id, pf.quantity_actual AS used_g
+      FROM print_filaments pf JOIN prints p ON p.id = pf.print_id
+      WHERE p.created_at >= ? AND p.status = 'done'
+      UNION ALL
+      SELECT p.filament_id, p.filament_used
+      FROM prints p
+      WHERE p.created_at >= ? AND p.status = 'done'
+        AND p.filament_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM print_filaments pf2 WHERE pf2.print_id = p.id)
+    ) src
+    JOIN filaments f ON f.id = src.filament_id
+    WHERE f.material IS NOT NULL
+    GROUP BY f.material
+    ORDER BY total_g DESC
+  `, [sinceStr, sinceStr]);
+
+  // ── Maintenance à venir (7 prochains jours) ───────────────────────────────
+  const [upcomingMaint] = await db.query(`
+    SELECT m.name AS task, pr.name AS printer_name,
+           m.next_date, m.interval_type
+    FROM maintenance_schedules m
+    JOIN printers pr ON pr.id = m.printer_id
+    WHERE m.next_date BETWEEN ? AND ?
+      AND m.active = 1
+    ORDER BY m.next_date ASC LIMIT 5
+  `, [nowStr, nextWeekStr]).catch(function(){ return [[]]; });
+
+  // ── Planning de la semaine à venir ───────────────────────────────────────
   const [upcomingPrints] = await db.query(`
     SELECT p.name, p.planned_at, p.estimated_duration,
            pr.name AS printer_name, f.name AS filament_name
@@ -192,6 +255,10 @@ async function collectReportData() {
     newLibraryObjects: libStats?.new_objects || 0,
     quotesStats,
     recentQuotes,
+    marginStats,
+    printerStats,
+    materialStats,
+    upcomingMaint,
     upcomingPrints,
   };
 }
@@ -217,6 +284,27 @@ function buildReportHtml(data, appName) {
     '</tr>';
   }).join('');
 
+  // Consommation par matière
+  const materialRows = (data.materialStats || []).map(function(m) {
+    return '<tr>' +
+      '<td style="padding:6px 12px;font-weight:500">' + m.material + '</td>' +
+      '<td style="padding:6px 12px;text-align:right">' + fmtG(m.total_g) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  // Stats par imprimante
+  const printerRows = (data.printerStats || []).map(function(p) {
+    const rate = p.total > 0 ? Math.round(p.success / p.total * 100) : 0;
+    const rCol = rate >= 90 ? '#10b981' : rate >= 70 ? '#f59e0b' : '#ef4444';
+    return '<tr style="border-top:1px solid #f3f4f6">' +
+      '<td style="padding:7px 10px;font-size:13px;font-weight:500">' + p.printer_name + '</td>' +
+      '<td style="padding:7px 10px;font-size:13px;text-align:center">' + (p.total||0) + '</td>' +
+      '<td style="padding:7px 10px;font-size:13px;text-align:center;color:' + rCol + ';font-weight:600">' + rate + '%</td>' +
+      '<td style="padding:7px 10px;font-size:13px;text-align:right">' + fmtH(p.hours) + '</td>' +
+      '<td style="padding:7px 10px;font-size:13px;text-align:right;color:#6b7280">' + fmtG(p.filament_g) + '</td>' +
+    '</tr>';
+  }).join('');
+
   const lowStockRows = (data.lowStock || []).map(function(f) {
     const col = f.pct < 10 ? '#ef4444' : '#f59e0b';
     return '<li style="margin:4px 0;color:' + col + '"><strong>' + f.name + '</strong> — ' + f.pct + '% restant</li>';
@@ -227,7 +315,21 @@ function buildReportHtml(data, appName) {
     return '<li style="margin:4px 0;color:' + col + '"><strong>' + c.printer_name + ' — ' + c.name + '</strong> — ' + c.hours_used + 'h / ' + c.interval_hours + 'h (' + c.pct + '%)</li>';
   }).join('');
 
+  // Maintenance à venir
+  const maintRows = (data.upcomingMaint || []).map(function(m) {
+    const d = m.next_date ? new Date(m.next_date).toLocaleDateString('fr-FR', { weekday:'short', day:'2-digit', month:'short' }) : '—';
+    return '<li style="margin:4px 0;color:#3b82f6"><strong>' + m.printer_name + ' — ' + m.task + '</strong> · ' + d + '</li>';
+  }).join('');
+
   const hasAlerts = (data.lowStock?.length > 0) || (data.consumableAlerts?.length > 0);
+
+  // Marge réelle globale
+  const ms          = data.marginStats;
+  const totalEst    = parseFloat(ms?.total_estimated || 0);
+  const totalReal   = parseFloat(ms?.total_real_cost || 0);
+  const totalMargin = Math.round((totalEst - totalReal) * 100) / 100;
+  const marginPct   = totalEst > 0 ? Math.round(totalMargin / totalEst * 100) : 0;
+  const marginCol   = totalMargin >= 0 ? '#10b981' : '#ef4444';
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -287,10 +389,39 @@ function buildReportHtml(data, appName) {
     </table>
   </td></tr>` : ''}
 
+  <!-- Consommation par matière -->
+  ${(data.materialStats?.length > 1) ? `
+  <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
+    <h2 style="margin:0 0 12px;font-size:16px;color:#1f2937;font-weight:600">Consommation par matière</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+      <thead><tr style="background:#f9fafb">
+        <th style="padding:7px 12px;text-align:left;font-size:12px;color:#6b7280;font-weight:500">Matière</th>
+        <th style="padding:7px 12px;text-align:right;font-size:12px;color:#6b7280;font-weight:500">Consommé</th>
+      </tr></thead>
+      <tbody>${materialRows}</tbody>
+    </table>
+  </td></tr>` : ''}
+
+  <!-- Activité par imprimante -->
+  ${(data.printerStats?.length > 0) ? `
+  <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
+    <h2 style="margin:0 0 12px;font-size:16px;color:#1f2937;font-weight:600">Activité par imprimante</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+      <thead><tr style="background:#f9fafb">
+        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:500">Imprimante</th>
+        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#6b7280;font-weight:500">Impressions</th>
+        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#6b7280;font-weight:500">Réussite</th>
+        <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;font-weight:500">Heures</th>
+        <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;font-weight:500">Filament</th>
+      </tr></thead>
+      <tbody>${printerRows}</tbody>
+    </table>
+  </td></tr>` : ''}
+
   <!-- Meilleure impression -->
   ${data.bestPrint ? `
   <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
-    <h2 style="margin:0 0 12px;font-size:16px;color:#1f2937;font-weight:600">⭐ Meilleure impression de la semaine</h2>
+    <h2 style="margin:0 0 12px;font-size:16px;color:#1f2937;font-weight:600">Meilleure impression de la semaine</h2>
     <div style="background:#fefce8;border:1px solid #fde047;border-radius:10px;padding:16px">
       <div style="font-size:15px;font-weight:600;color:#1f2937">${data.bestPrint.name}</div>
       <div style="font-size:20px;color:#f59e0b;margin:4px 0">${stars(data.bestPrint.rating)}</div>
@@ -302,25 +433,10 @@ function buildReportHtml(data, appName) {
     </div>
   </td></tr>` : ''}
 
-  <!-- Alertes -->
-  ${hasAlerts ? `
-  <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
-    <h2 style="margin:0 0 12px;font-size:16px;color:#1f2937;font-weight:600">⚠️ Alertes</h2>
-    ${lowStockRows ? '<p style="margin:0 0 6px;font-size:13px;font-weight:500;color:#6b7280">Stock filament faible :</p><ul style="margin:0 0 12px;padding-left:20px">' + lowStockRows + '</ul>' : ''}
-    ${consumableRows ? '<p style="margin:0 0 6px;font-size:13px;font-weight:500;color:#6b7280">Consommables à remplacer :</p><ul style="margin:0;padding-left:20px">' + consumableRows + '</ul>' : ''}
-  </td></tr>` : ''}
-
-  <!-- Bibliothèque -->
-  ${data.newLibraryObjects > 0 ? `
-  <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
-    <h2 style="margin:0 0 8px;font-size:16px;color:#1f2937;font-weight:600">📚 Bibliothèque</h2>
-    <p style="margin:0;font-size:14px;color:#374151">${data.newLibraryObjects} nouvel objet${data.newLibraryObjects>1?'s':''} ajouté${data.newLibraryObjects>1?'s':''} cette semaine.</p>
-  </td></tr>` : ''}
-
   <!-- Devis -->
   ${(data.quotesStats?.total > 0) ? `
   <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
-    <h2 style="margin:0 0 16px;font-size:16px;color:#1f2937;font-weight:600">📄 Devis de la semaine</h2>
+    <h2 style="margin:0 0 16px;font-size:16px;color:#1f2937;font-weight:600">Devis de la semaine</h2>
     <table width="100%" cellpadding="0" cellspacing="0">
     <tr>
       <td style="text-align:center;background:#f0fdf4;border-radius:10px;padding:14px;width:25%">
@@ -344,11 +460,19 @@ function buildReportHtml(data, appName) {
       </td>
     </tr>
     </table>
+    ${(ms?.quotes_with_links > 0) ? `
+    <div style="margin-top:14px;background:#f0fdf4;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#1f2937">Marge réelle (devis liés à des impressions)</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px">Estimé : ${totalEst.toFixed(2)} € · Coût réel : ${totalReal.toFixed(2)} €</div>
+      </div>
+      <div style="font-size:20px;font-weight:700;color:${marginCol}">${totalMargin >= 0 ? '+' : ''}${totalMargin.toFixed(2)} € (${marginPct}%)</div>
+    </div>` : ''}
     ${data.recentQuotes?.length ? `
     <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:14px">
       <thead><tr style="background:#f9fafb">
         <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:500">Client</th>
-        <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:500">Description</th>
+        <th style="padding:7px 10px;text-align:center;font-size:11px;color:#6b7280;font-weight:500">Articles</th>
         <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;font-weight:500">Total HT</th>
         <th style="padding:7px 10px;text-align:center;font-size:11px;color:#6b7280;font-weight:500">Statut</th>
       </tr></thead>
@@ -357,12 +481,21 @@ function buildReportHtml(data, appName) {
         const statusLabels = { draft:'Brouillon', sent:'Envoyé', accepted:'Accepté', refused:'Refusé' };
         return '<tr style="border-top:1px solid #f3f4f6">' +
           '<td style="padding:7px 10px;font-size:13px;font-weight:500">' + q.client_name + '</td>' +
-          '<td style="padding:7px 10px;font-size:12px;color:#6b7280">' + (q.description||'—').substring(0,40) + '</td>' +
+          '<td style="padding:7px 10px;font-size:12px;color:#6b7280;text-align:center">' + (q.item_count||0) + ' article' + (q.item_count>1?'s':'') + '</td>' +
           '<td style="padding:7px 10px;font-size:13px;text-align:right;font-weight:600">' + parseFloat(q.total_ht||0).toFixed(2) + ' €</td>' +
           '<td style="padding:7px 10px;text-align:center"><span style="font-size:11px;color:' + (statusColors[q.status]||'#6b7280') + ';font-weight:500">' + (statusLabels[q.status]||q.status) + '</span></td>' +
         '</tr>';
       }).join('')}</tbody>
     </table>` : ''}
+  </td></tr>` : ''}
+
+  <!-- Alertes + Maintenance à venir -->
+  ${(hasAlerts || data.upcomingMaint?.length > 0) ? `
+  <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #f3f4f6">
+    <h2 style="margin:0 0 12px;font-size:16px;color:#1f2937;font-weight:600">Alertes &amp; Maintenance</h2>
+    ${lowStockRows ? '<p style="margin:0 0 6px;font-size:13px;font-weight:500;color:#6b7280">Stock filament faible :</p><ul style="margin:0 0 12px;padding-left:20px">' + lowStockRows + '</ul>' : ''}
+    ${consumableRows ? '<p style="margin:0 0 6px;font-size:13px;font-weight:500;color:#6b7280">Consommables à remplacer :</p><ul style="margin:0 0 12px;padding-left:20px">' + consumableRows + '</ul>' : ''}
+    ${maintRows ? '<p style="margin:0 0 6px;font-size:13px;font-weight:500;color:#6b7280">Maintenance à venir cette semaine :</p><ul style="margin:0;padding-left:20px">' + maintRows + '</ul>' : ''}
   </td></tr>` : ''}
 
   <!-- Planning semaine à venir -->

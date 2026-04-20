@@ -235,6 +235,43 @@ async function computeProjectStatus(projectId) {
   return 'draft';
 }
 
+// ── Calcul du coût réel d'une impression ─────────────────────────────────
+
+async function calcRealCost(printId, filamentId, printerId, filamentUsedG, actualDurationMin) {
+  try {
+    let filamentPrice = 0, powerW = 0, elecRate = 0.20;
+
+    if (filamentId) {
+      const [[f]] = await db.query('SELECT price FROM filaments WHERE id=?', [filamentId]);
+      filamentPrice = parseFloat(f?.price || 0);
+    }
+    if (printerId) {
+      const [[p]] = await db.query('SELECT power_consumption FROM printers WHERE id=?', [printerId]);
+      powerW = parseFloat(p?.power_consumption || 0);
+    }
+    const [[elec]] = await db.query("SELECT value FROM settings WHERE key_name='quote_electricity_rate'");
+    elecRate = parseFloat(elec?.value || 0.20);
+
+    const filamentCost    = (parseFloat(filamentUsedG || 0) / 1000) * filamentPrice;
+    const electricityCost = (parseFloat(actualDurationMin || 0) / 60) * (powerW / 1000) * elecRate;
+    const realCost        = filamentCost + electricityCost;
+
+    await db.query(
+      'UPDATE prints SET real_cost=?, real_filament_cost=?, real_electricity_cost=? WHERE id=?',
+      [
+        Math.round(realCost        * 10000) / 10000,
+        Math.round(filamentCost    * 10000) / 10000,
+        Math.round(electricityCost * 10000) / 10000,
+        printId,
+      ]
+    );
+    return { realCost, filamentCost, electricityCost, filamentPrice, powerW, elecRate };
+  } catch(e) {
+    console.error('[prints] Erreur calcul coût réel :', e.message);
+    return null;
+  }
+}
+
 router.put('/:id', async (req, res) => {
   try {
     const { name, printer_id, filament_id, file_name, status, progress,
@@ -286,6 +323,11 @@ router.put('/:id', async (req, res) => {
       }
     }
 
+    // Calculer le coût réel quand l'impression est terminée
+    if (status === 'done' && (filament_used || actual_duration)) {
+      await calcRealCost(req.params.id, filament_id, printer_id, filament_used, actual_duration);
+    }
+
     const [rows] = await db.query(`
       SELECT p.*, pr.name as printer_name, f.name as filament_name, f.color_hex
       FROM prints p LEFT JOIN printers pr ON p.printer_id=pr.id LEFT JOIN filaments f ON p.filament_id=f.id
@@ -320,6 +362,32 @@ router.put('/:id', async (req, res) => {
     await logAction('print', req.params.id, 'update', detail);
     res.json(updatedRows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/prints/:id/recalc-cost — recalculer le coût réel manuellement
+router.patch('/:id/recalc-cost', async (req, res) => {
+  try {
+    const [[p]] = await db.query(
+      'SELECT id, filament_id, printer_id, filament_used, actual_duration FROM prints WHERE id=?',
+      [req.params.id]
+    );
+    if (!p) return res.status(404).json({ error: 'Impression non trouvée' });
+    if (!p.filament_used && !p.actual_duration)
+      return res.status(400).json({ error: 'Filament consommé et durée réelle manquants' });
+
+    const costs = await calcRealCost(p.id, p.filament_id, p.printer_id, p.filament_used, p.actual_duration);
+    if (!costs) return res.status(500).json({ error: 'Erreur calcul' });
+
+    res.json({
+      ok: true,
+      real_cost:            Math.round(costs.realCost        * 100) / 100,
+      real_filament_cost:   Math.round(costs.filamentCost    * 100) / 100,
+      real_electricity_cost:Math.round(costs.electricityCost * 100) / 100,
+      filament_price:       costs.filamentPrice,
+      power_w:              costs.powerW,
+      elec_rate:            costs.elecRate,
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
