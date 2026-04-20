@@ -147,3 +147,37 @@
 - Divs `.printer-temps:empty { display:none }` (plus de carrés vides)
 - `chromium-browser` → `chromium` (Raspberry Pi OS Bookworm)
 - Démarrage kiosque : systemd → `.bash_profile` (plus fiable sur Pi OS Lite)
+
+---
+
+## [2.6.0] — 2026-04-19
+
+### Ajouté
+- **Devis multi-lignes** — refonte complète du système de devis
+  - Table `quote_items` — chaque devis peut contenir plusieurs articles
+  - Chaque ligne : désignation, quantité, durée, filament (g), filament sélectionné, imprimante
+  - Calcul automatique par ligne : coût matière + électricité + marge → prix unitaire HT
+  - Total devis = somme de toutes les lignes (qty × prix unitaire)
+  - Aperçu calcul en temps réel pendant la saisie d'une ligne
+  - Changement de marge globale → recalcul automatique de toutes les lignes
+  - Migration automatique des devis existants (1 ligne par devis)
+  - Suppression en cascade (quote_items supprimés avec le devis)
+- **Association devis → impression** — lier une impression réalisée à une ligne de devis
+  - Colonne `print_id` dans `quote_items` (FK vers `prints`)
+  - Bouton Lier par ligne — sélecteur dans la liste des impressions terminées
+  - Calcul marge réelle : prix estimé vs coût filament réel de l'impression liée
+  - Vue Rentabilité (devis acceptés) : total estimé, coût réel, marge réelle en € et %
+  - Barre d'avancement des liaisons par devis
+- **Galerie photos améliorée**
+  - Filtre période (7 jours, 30 jours, 3 mois, cette année)
+  - Badge note en overlay sur chaque photo
+  - Point couleur filament et date sur chaque carte
+  - Lightbox : panneau d'infos à droite (note, matière, filament, imprimante, durée, filament consommé, notes)
+  - Tri par meilleure note en plus du tri par date
+
+### Modifié
+- Interface devis : liste affiche le nombre d'articles et le total HT
+- Formulaire devis : séparation entête (client, marge, statut) et lignes
+- Détail devis : tableau des lignes avec ajout/suppression inline, modal élargi (xl)
+- Suppression du bouton Imprimer (outil d'estimation de prix, pas de devis commercial)
+
