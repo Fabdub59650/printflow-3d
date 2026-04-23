@@ -351,7 +351,7 @@ async function openPrintDetail(id) {
     '<div style="margin-top:8px;display:flex;gap:8px">' +
       '<label class="btn btn-sm" style="cursor:pointer">' +
         '📷 ' + (p.photo_path ? 'Remplacer' : 'Ajouter une photo') +
-        '<input type="file" accept="image/*" style="display:none" onchange="uploadPrintPhoto(' + p.id + ',this)">' +
+        '<input type="file" accept="image/*" capture="environment" style="display:none" onchange="uploadPrintPhoto(' + p.id + ',this)">' +
       '</label>' +
     '</div>' +
   '</div>';
