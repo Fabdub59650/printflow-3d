@@ -1,0 +1,28 @@
+{
+  "name": "printflow",
+  "version": "2.7.0",
+  "description": "PrintFlow — Gestion impressions 3D",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-http-proxy": "^2.0.0",
+    "multer": "^2.1.1",
+    "mysql2": "^3.6.5",
+    "nfc-pcsc": "^0.8.1",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^2.7.0",
+    "nodemailer": "^6.9.8",
+    "tp-link-tapo-connect": "^2.0.15",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "build_date": "13/04/2026"
+}
