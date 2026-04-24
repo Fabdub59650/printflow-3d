@@ -7,6 +7,7 @@
  */
 
 const { exec, execSync } = require('child_process');
+const { encrypt, decrypt } = require('./crypto');
 const fs        = require('fs');
 const path      = require('path');
 const os        = require('os');
@@ -45,7 +46,7 @@ async function getBackupSettings() {
       nasIp:           s.backup_nas_ip       || '',
       nasShare:        s.backup_nas_share    || '',
       nasUser:         s.backup_nas_user     || '',
-      nasPassword:     s.backup_nas_password || '',
+      nasPassword:     s.backup_nas_password ? (function(){ try{ return decrypt(s.backup_nas_password); }catch(_){ return s.backup_nas_password; } })() : '',
       nasFolder:       s.backup_nas_folder   || '/printflow',
       reportEmail:     s.backup_report_email !== 'false',
     };
@@ -597,11 +598,12 @@ function setupRoutes(router) {
         ['backup_nas_ip',           nasIp       || ''],
         ['backup_nas_share',        nasShare    || ''],
         ['backup_nas_user',         nasUser     || ''],
-        ['backup_nas_password',     nasPassword || ''],
+        ['backup_nas_password',     nasPassword !== undefined ? encrypt(nasPassword) : undefined],
         ['backup_nas_folder',       nasFolder   || '/printflow'],
         ['backup_report_email',     String(reportEmail !== false && reportEmail !== 'false')],
       ];
       for (const [k, v] of entries) {
+        if (v === undefined) continue; // Ne pas écraser si non fourni
         await db.query(
           'INSERT INTO settings (key_name,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?',
           [k, v, v]

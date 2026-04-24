@@ -392,7 +392,7 @@ async function renderSettings() {
               </div>
               <div class="form-group">
                 <label class="form-label">Mot de passe</label>
-                <input type="password" id="set-nas-password" value="${settings.backup_nas_password||''}" placeholder="••••••••">
+                <input type="password" id="set-nas-password" value="" placeholder="${settings.backup_nas_password ? 'Configuré — laisser vide pour conserver' : 'Mot de passe'}">
               </div>
               <div class="form-group full">
                 <label class="form-label">Dossier cible sur le NAS</label>
@@ -1131,7 +1131,10 @@ async function saveBackupSettings() {
     nasIp:          document.getElementById('set-nas-ip')?.value || '',
     nasShare:       document.getElementById('set-nas-share')?.value || '',
     nasUser:        document.getElementById('set-nas-user')?.value || '',
-    nasPassword:    document.getElementById('set-nas-password')?.value || '',
+    nasPassword:    (function(){
+      const v = document.getElementById('set-nas-password')?.value;
+      return v || undefined; // undefined = ne pas écraser si vide
+    })(),
     nasFolder:      document.getElementById('set-nas-folder')?.value || '/printflow',
   };
   try {
