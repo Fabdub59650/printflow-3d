@@ -110,7 +110,8 @@ async function sendBackupReport(report) {
   try {
     const { getSmtpConfig, createTransporter } = require('./mailer');
     const cfg = await getSmtpConfig();
-    if (!cfg.host || !cfg.email) return;
+    if (!cfg.host) { console.log('[Backup] Mail non envoyé : SMTP non configuré'); return; }
+    if (!cfg.email) { console.log('[Backup] Mail non envoyé : adresse email destinataire manquante'); return; }
 
     const [[appRow]] = await db.query(
       "SELECT value FROM settings WHERE key_name='app_name'"
@@ -236,7 +237,11 @@ async function runBackup() {
     report.dbSize = fs.statSync(dbFile).size;
 
     // ── 2. Photos (rsync incrémentiel avec hard links) ───
-    const PHOTOS_DIR = path.join(INSTALL_DIR, 'frontend', 'uploads', 'photos');
+    const [[photoPathRow]] = await db.query(
+      "SELECT value FROM settings WHERE key_name='prints_photo_path'"
+    ).catch(function(){ return [[null]]; });
+    const PHOTOS_DIR = photoPathRow?.value || '/opt/printflow/prints';
+
     if (fs.existsSync(PHOTOS_DIR)) {
       const photosDest = path.join(destDir, 'photos');
       fs.mkdirSync(photosDest, { recursive: true });
@@ -274,6 +279,18 @@ async function runBackup() {
       dbSize: report.dbSize, photoCount: report.photoCount, libCount: report.libCount,
     }, null, 2));
 
+    // Enregistrer les métadonnées en BDD pour affichage même si NAS non monté
+    const metaKey = 'backup_meta_' + stamp;
+    const metaVal = JSON.stringify({
+      stamp, date: now.toISOString(), type: report.type,
+      dbSize: report.dbSize, photoCount: report.photoCount, libCount: report.libCount,
+      destination: report.destination,
+    });
+    await db.query(
+      'INSERT INTO settings (key_name,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?',
+      [metaKey, metaVal, metaVal]
+    ).catch(function(){});
+
     // ── Rétention ────────────────────────────────────────
     const allDirs = fs.readdirSync(backupRoot)
       .filter(function(d){ return /^\d{4}-\d{2}-\d{2}_/.test(d); })
@@ -287,6 +304,10 @@ async function runBackup() {
         });
         report.deleted.push(dir);
         console.log('[Backup] Supprimé (rétention) :', dir);
+        // Supprimer aussi les métadonnées BDD
+        await db.query(
+          "DELETE FROM settings WHERE key_name=?", ['backup_meta_' + dir]
+        ).catch(function(){});
       }
     }
 
@@ -471,20 +492,33 @@ function setupRoutes(router) {
       // Lister les sauvegardes (dossiers horodatés)
       let backups = [];
       try {
-        const root = settings.path;
-        if (fs.existsSync(root)) {
-          backups = fs.readdirSync(root)
-            .filter(function(d){ return /^\d{4}-\d{2}-\d{2}_/.test(d); })
-            .filter(function(d){ return fs.statSync(path.join(root,d)).isDirectory(); })
-            .sort().reverse()
-            .map(function(d) {
-              const manifest = path.join(root, d, 'manifest.json');
-              let info = { stamp: d };
-              try { info = Object.assign(info, JSON.parse(fs.readFileSync(manifest))); } catch(_) {}
-              return info;
-            });
+        // Lire depuis la BDD en priorité (fonctionne même si NAS non monté)
+        const [metaRows] = await db.query(
+          "SELECT key_name, value FROM settings WHERE key_name LIKE 'backup_meta_%' ORDER BY key_name DESC LIMIT 20"
+        );
+        if (metaRows.length > 0) {
+          backups = metaRows.map(function(r) {
+            try { return JSON.parse(r.value); } catch(_) { return { stamp: r.key_name.replace('backup_meta_','') }; }
+          });
+        } else {
+          // Fallback lecture dossier local
+          const root = settings.path;
+          if (fs.existsSync(root)) {
+            backups = fs.readdirSync(root)
+              .filter(function(d){ return /^\d{4}-\d{2}-\d{2}_/.test(d); })
+              .filter(function(d){ return fs.statSync(path.join(root,d)).isDirectory(); })
+              .sort().reverse()
+              .map(function(d) {
+                const manifest = path.join(root, d, 'manifest.json');
+                let info = { stamp: d };
+                try { info = Object.assign(info, JSON.parse(fs.readFileSync(manifest))); } catch(_) {}
+                return info;
+              });
+          }
         }
       } catch(_) {}
+      // Lire les métadonnées des sauvegardes depuis la BDD (fonctionne même si NAS non monté)
+      const backupRootForList = settings.path || DEFAULT_BACKUP_PATH;
       const [[lastRun]]    = await db.query("SELECT value FROM settings WHERE key_name='backup_last_run'").catch(function(){ return [[null]]; });
       const [[lastStatus]] = await db.query("SELECT value FROM settings WHERE key_name='backup_last_status'").catch(function(){ return [[null]]; });
       res.json({

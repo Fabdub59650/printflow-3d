@@ -18,9 +18,11 @@ router.put('/', async (req, res) => {
   try {
     const entries = Object.entries(req.body);
     for (const [k, v] of entries) {
+      // Ignorer les clés internes
+      if (k.startsWith('_')) continue;
       await db.query(
         'INSERT INTO settings (key_name, value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?',
-        [k, v, v]
+        [k, String(v), String(v)]
       );
     }
     res.json({ ok: true });

@@ -1,6 +1,14 @@
 // ── Authentification ──────────────────────────────────────
 let _authToken = '';
-try { _authToken = localStorage.getItem('pf_auth_token') || ''; } catch(_) {}
+// Lire le token depuis localStorage ou depuis le cookie (survit au cache)
+try {
+  _authToken = localStorage.getItem('pf_auth_token') || '';
+  if (!_authToken) {
+    // Fallback : lire depuis le cookie pf_auth
+    const match = document.cookie.match(/(?:^|;)\s*pf_auth=([^;]+)/);
+    if (match) _authToken = decodeURIComponent(match[1]);
+  }
+} catch(_) {}
 
 async function checkAuth() {
   try {
@@ -41,7 +49,12 @@ async function doLogin() {
     const d = await r.json();
     if (d.ok) {
       _authToken = d.token || pwd;
-      try { localStorage.setItem('pf_auth_token', _authToken); } catch(_) {}
+      try {
+  localStorage.setItem('pf_auth_token', _authToken);
+  // Cookie persistant 1 an (survit au vidage du cache navigateur)
+  const expires = new Date(Date.now() + 365*24*60*60*1000).toUTCString();
+  document.cookie = 'pf_auth=' + encodeURIComponent(_authToken) + '; expires=' + expires + '; path=/; SameSite=Lax';
+} catch(_) {}
       const m = document.getElementById('login-modal');
       if (m) m.remove();
     } else {
@@ -60,7 +73,10 @@ async function _apiFetch(method, path, body) {
   const r = await fetch('/api' + path, opts);
   if (r.status === 401) {
     _authToken = '';
-    try { localStorage.removeItem('pf_auth_token'); } catch(_) {}
+    try {
+  localStorage.removeItem('pf_auth_token');
+  document.cookie = 'pf_auth=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+} catch(_) {}
     showLoginModal();
     throw new Error('Non authentifié');
   }

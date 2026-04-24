@@ -903,7 +903,10 @@ function toggleSetting(key, el) {
   dot.style.left       = enabled ? '19px' : '2px';
   el.style.background  = enabled ? 'var(--accent)' : 'var(--border2)';
   // Sauvegarder immédiatement
-  API.put('/settings', { [key]: String(enabled) }).catch(() => {});
+  API.put('/settings', { [key]: String(enabled) }).catch(function(e) {
+    console.error('[Settings] Erreur sauvegarde', key, ':', e.message);
+    toast('Erreur sauvegarde paramètre', 'error');
+  });
   // Mettre à jour la variable globale
   if (key === 'show_prices')        window._showPrices        = enabled;
   if (key === 'show_locations')     window._showLocations      = enabled;
