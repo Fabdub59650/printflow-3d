@@ -4,6 +4,7 @@
  */
 
 const router = require('express').Router();
+const { logAction } = require('../history');
 const db     = require('../db');
 
 // ── Calcul coût d'une ligne ───────────────────────────────────────────────
@@ -113,6 +114,7 @@ router.post('/', async (req, res) => {
       [client_name, client_email || null, notes || null, status || 'draft', margin_pct || 20]
     );
     const [[q]] = await db.query('SELECT * FROM quotes WHERE id=?', [result.insertId]);
+    await logAction('quote', result.insertId, 'create', 'Devis créé : ' + client_name);
     res.json({ ...q, items: [] });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -122,7 +124,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { client_name, client_email, notes, status, margin_pct } = req.body;
-    const [[prev]] = await db.query('SELECT margin_pct FROM quotes WHERE id=?', [req.params.id]);
+    const [[prev]] = await db.query('SELECT margin_pct, status FROM quotes WHERE id=?', [req.params.id]);
     await db.query(
       'UPDATE quotes SET client_name=?, client_email=?, notes=?, status=?, margin_pct=? WHERE id=?',
       [client_name, client_email || null, notes || null, status || 'draft', margin_pct || 20, req.params.id]
@@ -144,6 +146,11 @@ router.put('/:id', async (req, res) => {
       await recalcQuoteTotal(req.params.id);
     }
     const [[q]] = await db.query('SELECT * FROM quotes WHERE id=?', [req.params.id]);
+    const statusLabels = { draft:'Brouillon', sent:'Envoyé', accepted:'Accepté', refused:'Refusé' };
+    const detail = status && status !== (prev?.status) 
+      ? 'Devis ' + q.client_name + ' — statut → ' + (statusLabels[status] || status)
+      : 'Devis modifié : ' + q.client_name;
+    await logAction('quote', req.params.id, status && status !== (prev?.status) ? 'status_changed' : 'update', detail);
     const [items] = await db.query(
       'SELECT qi.*, f.name AS filament_name, p.name AS printer_name FROM quote_items qi LEFT JOIN filaments f ON f.id=qi.filament_id LEFT JOIN printers p ON p.id=qi.printer_id WHERE qi.quote_id=? ORDER BY qi.sort_order, qi.id',
       [req.params.id]
@@ -323,7 +330,9 @@ router.get('/:id/profitability', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
+    const [[q]] = await db.query('SELECT client_name FROM quotes WHERE id=?', [req.params.id]);
     await db.query('DELETE FROM quotes WHERE id=?', [req.params.id]);
+    await logAction('quote', req.params.id, 'delete', 'Devis supprimé : ' + (q?.client_name || '?'));
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

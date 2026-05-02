@@ -42,7 +42,11 @@ async function renderLibrary() {
      </div>
      <button class="btn btn-sm" onclick="openThemeForm()" style="margin-right:4px">+ Thème</button>
      <button class="btn btn-sm" onclick="openObjectForm()" style="margin-right:4px">+ Objet</button>
-     <button class="btn btn-primary" onclick="openUploadForm()">↑ Importer fichier</button>`;
+     <button class="btn btn-primary" onclick="openUploadForm()">↑ Importer fichier</button>
+     <label class="btn" style="cursor:pointer" title="Importer un objet depuis un ZIP PrintFlow">
+       📦 Importer ZIP
+       <input type="file" accept=".zip" style="display:none" onchange="importLibraryZip(this)">
+     </label>`;
   document.getElementById('content').innerHTML =
     '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
   libraryThemes = await API.get('/library/themes');
@@ -409,6 +413,7 @@ async function openObjectDetail(id) {
     attachHtml +
     '<div class="modal-footer">' +
       '<button class="btn" onclick="closeModal()">Fermer</button>' +
+      '<button class="btn" onclick="exportLibraryObject(' + id + ',\'' + obj.name.replace(/'/g,"\\'") + '\')">↓ Exporter</button>' +
       '<button class="btn" onclick="openQRCode(' + id + ',\'' + obj.name.replace(/'/g,"\\'") + '\')">QR Code</button>' +
       '<button class="btn" onclick="closeModal();openObjectForm(' + id + ')">Modifier</button>' +
       '<button class="btn btn-danger btn-sm" onclick="confirmDeleteObjectFull(' + id + ')">Supprimer tout</button>' +
@@ -653,6 +658,47 @@ async function deleteObjectAttachment(id) {
       openObjectDetail(id);
     } catch(e) { toast('Erreur : ' + e.message, 'error'); }
   });
+}
+
+// ── Export / Import objet bibliothèque ───────────────────────────────────
+
+function exportLibraryObject(id, name) {
+  toast('Préparation de l\'export…', 'info');
+  const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+  const a = document.createElement('a');
+  a.href = '/api/library/objects/' + id + '/export';
+  a.download = 'printflow_' + safeName + '.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function importLibraryZip(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  input.value = ''; // Reset pour permettre de réimporter le même fichier
+
+  // Afficher progression
+  const toastId = toast('Import en cours : ' + file.name + '…', 'info', 0);
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/library/import', { method: 'POST', body: fd });
+    const result = await r.json();
+    if (!r.ok) throw new Error(result.error || 'Erreur import');
+
+    toast(
+      'Import réussi : "' + result.name + '" · ' +
+      result.files_imported + ' fichier(s)' +
+      (result.has_photo ? ' · photo' : '') +
+      (result.has_attachment ? ' · document' : ''),
+      'success'
+    );
+    await loadLibraryContent();
+    openObjectDetail(result.object_id);
+  } catch(e) {
+    toast('Erreur import : ' + e.message, 'error');
+  }
 }
 
 function openUploadForm(prefillObjectId=null) {

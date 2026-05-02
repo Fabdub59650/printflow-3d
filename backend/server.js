@@ -73,6 +73,7 @@ app.use('/api/spoolman',    require('./routes/spoolman'));
 app.use('/api/projects',    require('./routes/projects'));
 app.use('/api/weighings',   require('./routes/weighings'));
 app.use('/api/library',     require('./routes/library'));
+app.use('/api/library',     require('./routes/library-export'));
 
 // Consommables imprimantes
 app.use('/api/consumables', require('./routes/consumables'));
@@ -96,6 +97,7 @@ app.use('/api/tapo',     require('./routes/tapo'));
 app.use('/api/quotes',    require('./routes/quotes'));
 app.use('/api/schedule',      require('./routes/schedule'));
 app.use('/api/spool-weights', require('./routes/spool-weights'));
+app.use('/api/updater',      require('./routes/updater'));
 // Rapport hebdomadaire
 app.use('/api/report', require('./routes/report'));
 

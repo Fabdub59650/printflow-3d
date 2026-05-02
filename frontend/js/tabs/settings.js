@@ -522,9 +522,10 @@ async function renderSettings() {
         if (!el2) return;
         const fmt = function(b) { return b < 1048576 ? (b/1024).toFixed(0)+' Ko' : (b/1048576).toFixed(1)+' Mo'; };
         el2.innerHTML = '<div style="display:flex;gap:16px;font-size:13px;flex-wrap:wrap">' +
-          '<span><strong>' + stats.file_count + '</strong> fichiers</span>' +
-          '<span>' + fmt(stats.total_size) + ' utilisés</span>' +
-          '<span style="font-size:12px;color:var(--text3)">' + stats.library_path + '</span>' +
+          '<span><strong>' + (stats.total_files || stats.file_count || 0) + '</strong> fichiers</span>' +
+          '<span><strong>' + (stats.total_objects || 0) + '</strong> objets</span>' +
+          '<span>' + fmt(stats.total_size || 0) + ' utilisés</span>' +
+          '<span style="font-size:12px;color:var(--text3)">' + (stats.library_path || '') + '</span>' +
           '</div>';
       }).catch(function() {});
       renderPurgeSection();
@@ -861,25 +862,36 @@ async function renderSettings() {
 
     case 'systeme':
       el.innerHTML = `
-    <!-- ── Système ────────────────────────────────── -->
-    <div class="card">
-      <div class="card-header"><span class="card-title">Informations système</span></div>
+    <!-- ── Informations application ───────────────── -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-header"><span class="card-title">PrintFlow-3D</span></div>
       <div class="stat-row"><span class="stat-label">Application</span><span class="stat-val">${settings.app_name||'PrintFlow-3D'}</span></div>
-      <div class="stat-row"><span class="stat-label">Version</span><span class="stat-val">${settings._version || '1.9.0'}</span></div>
+      <div class="stat-row"><span class="stat-label">Version</span><span class="stat-val">${settings._version || '—'}</span></div>
       <div class="stat-row"><span class="stat-label">Date de build</span><span class="stat-val">${settings._build_date || '—'}</span></div>
       <div class="stat-row"><span class="stat-label">Backend</span><span class="stat-val">Node.js + Express</span></div>
       <div class="stat-row"><span class="stat-label">Base de données</span><span class="stat-val">MariaDB</span></div>
-      <div class="stat-row" id="os-version-row"><span class="stat-label">Système d'exploitation</span><span class="stat-val" id="os-version-val">Chargement…</span></div>
+    </div>
+    <!-- ── Santé système ───────────────────────────── -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-header">
+        <span class="card-title">Santé du système</span>
+        <button class="btn btn-sm" onclick="loadSystemHealth()">↻ Actualiser</button>
+      </div>
+      <div id="system-health-content">
+        <div style="color:var(--text3);font-size:13px;padding:8px 0">Chargement…</div>
+      </div>
+    </div>
+    <!-- ── Mises à jour ────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Mises à jour</span>
+        <button class="btn btn-sm" onclick="checkForUpdate()">Vérifier</button>
+      </div>
+      <div id="update-check-content">
+        <div style="color:var(--text3);font-size:13px;padding:4px 0">Cliquez sur "Vérifier" pour rechercher une mise à jour.</div>
+      </div>
     </div>`;
-      // Charger la version OS
-      API.get('/settings/os-info').then(function(info) {
-        var el2 = document.getElementById('os-version-val');
-        if (el2) el2.textContent = info.os || '—';
-      }).catch(function() {
-        var el2 = document.getElementById('os-version-val');
-        if (el2) el2.textContent = '—';
-      });
-      break;
+      loadSystemHealth();
       break;
   }
 }
@@ -2090,4 +2102,210 @@ async function deleteSpoolWeight(id) {
     toast('Entrée supprimée');
     loadSpoolWeights();
   });
+}
+
+// ── Santé système ─────────────────────────────────────────────────────────
+async function loadSystemHealth() {
+  const el = document.getElementById('system-health-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">Chargement…</div>';
+
+  try {
+    const h = await API.get('/settings/system-health');
+
+    const fmtBytes = function(b) {
+      if (!b) return '—';
+      if (b >= 1073741824) return (b/1073741824).toFixed(1) + ' Go';
+      if (b >= 1048576)    return (b/1048576).toFixed(0) + ' Mo';
+      return (b/1024).toFixed(0) + ' Ko';
+    };
+
+    const fmtUptime = function(s) {
+      if (!s) return '—';
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      if (d > 0) return d + 'j ' + h + 'h ' + m + 'min';
+      if (h > 0) return h + 'h ' + m + 'min';
+      return m + 'min';
+    };
+
+    const bar = function(pct, color) {
+      return '<div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">' +
+        '<div style="height:100%;width:' + Math.min(100,pct) + '%;background:' + color + ';border-radius:3px;transition:width 0.3s"></div>' +
+      '</div>';
+    };
+
+    const tempColor = !h.cpu_temp ? 'var(--text3)'
+      : h.cpu_temp > 75 ? '#ef4444'
+      : h.cpu_temp > 60 ? '#f59e0b'
+      : '#10b981';
+
+    const diskColor = !h.disk_pct ? 'var(--accent)'
+      : h.disk_pct > 90 ? '#ef4444'
+      : h.disk_pct > 75 ? '#f59e0b'
+      : 'var(--accent)';
+
+    const memColor = !h.mem_pct ? 'var(--accent)'
+      : h.mem_pct > 85 ? '#ef4444'
+      : h.mem_pct > 70 ? '#f59e0b'
+      : 'var(--accent)';
+
+    const serviceOk = h.service_status === 'active';
+
+    el.innerHTML =
+      // OS + réseau
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">' +
+        '<div class="stat-row"><span class="stat-label">Système</span><span class="stat-val" style="font-size:12px">' + (h.os||'—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Node.js</span><span class="stat-val">' + (h.node_version||'—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">IP réseau</span><span class="stat-val">' + (h.ip||'—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Service</span><span class="stat-val" style="color:' + (serviceOk?'#10b981':'#ef4444') + ';font-weight:600">' + (serviceOk?'✓ actif':'✗ ' + h.service_status) + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Uptime</span><span class="stat-val">' + fmtUptime(h.uptime_s) + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Charge CPU (1m)</span><span class="stat-val">' + (h.load_1m !== null ? h.load_1m.toFixed(2) : '—') + '</span></div>' +
+      '</div>' +
+
+      // Température
+      '<div style="margin-bottom:10px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
+          '<span style="font-size:12px;color:var(--text3)">🌡 Température CPU</span>' +
+          '<span style="font-size:13px;font-weight:600;color:' + tempColor + '">' + (h.cpu_temp !== null ? h.cpu_temp + ' °C' : '—') + '</span>' +
+        '</div>' +
+        (h.cpu_temp !== null ? bar(h.cpu_temp / 100 * 100, tempColor) : '') +
+        (h.cpu_temp > 75 ? '<div style="font-size:11px;color:#ef4444;margin-top:3px">⚠ Température élevée — vérifiez le refroidissement</div>' : '') +
+      '</div>' +
+
+      // RAM
+      '<div style="margin-bottom:10px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
+          '<span style="font-size:12px;color:var(--text3)">🧠 Mémoire RAM</span>' +
+          '<span style="font-size:13px;font-weight:600">' + fmtBytes(h.mem_used) + ' / ' + fmtBytes(h.mem_total) + '</span>' +
+        '</div>' +
+        bar(h.mem_pct || 0, memColor) +
+        '<div style="font-size:11px;color:var(--text3);margin-top:3px">' + (h.mem_pct||0) + '% utilisé</div>' +
+      '</div>' +
+
+      // Disque
+      '<div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
+          '<span style="font-size:12px;color:var(--text3)">💾 Espace disque</span>' +
+          '<span style="font-size:13px;font-weight:600">' + fmtBytes(h.disk_used) + ' / ' + fmtBytes(h.disk_total) + '</span>' +
+        '</div>' +
+        bar(h.disk_pct || 0, diskColor) +
+        '<div style="font-size:11px;color:var(--text3);margin-top:3px">' + (h.disk_pct||0) + '% utilisé · ' + fmtBytes(h.disk_free) + ' libres' +
+          (h.disk_pct > 90 ? ' <span style="color:#ef4444">⚠ Espace critique</span>' : '') +
+        '</div>' +
+      '</div>';
+
+  } catch(e) {
+    if (el) el.innerHTML = '<div style="color:var(--danger);font-size:13px">Erreur : ' + e.message + '</div>';
+  }
+}
+
+// ── Vérification et installation des mises à jour ────────────────────────
+async function checkForUpdate() {
+  const el = document.getElementById('update-check-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:4px 0">Vérification en cours…</div>';
+
+  try {
+    const info = await API.get('/updater/check');
+
+    if (info.is_newer) {
+      // Mise à jour disponible
+      const pubDate = info.published_at
+        ? new Date(info.published_at).toLocaleDateString('fr-FR', {day:'2-digit',month:'long',year:'numeric'})
+        : '';
+
+      // Formater les notes de release (markdown basique)
+      const notes = (info.release_notes || '')
+        .split('\n')
+        .slice(0, 8)
+        .map(function(l){ return l.replace(/^#+\s*/, '').replace(/\*\*/g,''); })
+        .filter(function(l){ return l.trim(); })
+        .join('<br>');
+
+      el.innerHTML =
+        '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius);padding:14px;margin-bottom:12px">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">' +
+            '<div>' +
+              '<div style="font-size:15px;font-weight:600;color:#166534">✨ Mise à jour disponible !</div>' +
+              '<div style="font-size:13px;color:#166534;margin-top:2px">' +
+                'v' + info.current_version + ' → <strong>v' + info.latest_version + '</strong>' +
+                (pubDate ? ' · ' + pubDate : '') +
+              '</div>' +
+            '</div>' +
+            '<button class="btn btn-primary" onclick="installUpdate(\'' + info.latest_version + '\',\'' + info.download_url + '\')">' +
+              '↓ Mettre à jour' +
+            '</button>' +
+          '</div>' +
+          (notes ? '<div style="margin-top:10px;font-size:12px;color:#166534;border-top:1px solid #86efac;padding-top:10px">' + notes + '</div>' : '') +
+        '</div>';
+    } else {
+      el.innerHTML =
+        '<div style="display:flex;align-items:center;gap:10px;padding:4px 0">' +
+          '<span style="color:#10b981;font-size:16px">✓</span>' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:500">Vous êtes à jour</div>' +
+            '<div style="font-size:12px;color:var(--text3)">Version ' + info.current_version + ' · Dernière version : ' + info.latest_version + '</div>' +
+          '</div>' +
+        '</div>';
+    }
+  } catch(e) {
+    el.innerHTML =
+      '<div style="color:var(--danger);font-size:13px">' +
+        '⚠ Impossible de vérifier : ' + e.message +
+        '<br><span style="font-size:11px;color:var(--text3)">Vérifiez la connexion réseau du Pi.</span>' +
+      '</div>';
+  }
+}
+
+async function installUpdate(version, downloadUrl) {
+  const confirmed = await new Promise(function(resolve) {
+    openModal(
+      '<div style="padding:8px 0">' +
+        '<p style="font-size:14px;margin-bottom:12px">Vous allez installer la version <strong>' + version + '</strong>.</p>' +
+        '<p style="font-size:13px;color:var(--text2);margin-bottom:8px">PrintFlow va redémarrer automatiquement. La mise à jour prend environ 30 secondes.</p>' +
+        '<p style="font-size:12px;color:var(--text3)">⚠ La base de données ne sera pas modifiée automatiquement — consultez le CHANGELOG pour les éventuelles migrations SQL.</p>' +
+      '</div>' +
+      '<div class="modal-footer">' +
+        '<button class="btn" onclick="closeModal()">Annuler</button>' +
+        '<button class="btn btn-primary" onclick="closeModal();window._updateConfirmed=true">Installer</button>' +
+      '</div>',
+      'Confirmer la mise à jour v' + version
+    );
+    // Attendre confirmation
+    const check = setInterval(function() {
+      if (window._updateConfirmed) {
+        window._updateConfirmed = false;
+        clearInterval(check);
+        resolve(true);
+      }
+      if (!document.getElementById('modal-overlay') || document.getElementById('modal-overlay').classList.contains('hidden')) {
+        clearInterval(check);
+        resolve(false);
+      }
+    }, 100);
+  });
+
+  if (!confirmed) return;
+
+  const el = document.getElementById('update-check-content');
+  if (el) el.innerHTML =
+    '<div style="color:var(--text2);font-size:13px;padding:4px 0">' +
+      '<div style="font-weight:500;margin-bottom:4px">⏳ Mise à jour en cours…</div>' +
+      '<div style="font-size:12px;color:var(--text3)">Téléchargement et installation de la v' + version + '. PrintFlow va redémarrer dans quelques secondes.</div>' +
+    '</div>';
+
+  try {
+    await API.post('/updater/update', { download_url: downloadUrl, latest_version: version });
+    if (el) el.innerHTML =
+      '<div style="color:#10b981;font-size:13px;padding:4px 0">' +
+        '<div style="font-weight:500;margin-bottom:4px">✓ Mise à jour lancée !</div>' +
+        '<div style="font-size:12px;color:var(--text3)">Rechargement de la page dans 15 secondes…</div>' +
+      '</div>';
+    // Recharger après redémarrage du service
+    setTimeout(function() { window.location.reload(); }, 15000);
+  } catch(e) {
+    if (el) el.innerHTML = '<div style="color:var(--danger);font-size:13px">Erreur : ' + e.message + '</div>';
+  }
 }
