@@ -164,9 +164,9 @@ function objectCard(o) {
   return `
   <div class="card" style="padding:0;display:flex;flex-direction:column;overflow:hidden">
     ${photoUrl ? `
-    <div style="width:100%;height:160px;overflow:hidden;position:relative;background:var(--bg3)">
+    <div style="width:100%;height:180px;overflow:hidden;position:relative;background:var(--bg3);display:flex;align-items:center;justify-content:center">
       <img src="${photoUrl}" alt="${o.name}"
-           style="width:100%;height:100%;object-fit:cover"
+           style="width:100%;height:100%;object-fit:contain"
            onerror="this.parentElement.style.display='none'">
     </div>` : `
     <div style="width:100%;height:80px;background:var(--accent-bg);
@@ -272,6 +272,25 @@ async function openObjectDetail(id) {
   const totalSize = obj.files.reduce(function(s,f){ return s+(f.file_size||0); }, 0);
   const photoUrl  = obj.photo_path ? '/api/library/objects/' + obj.id + '/photo' : null;
 
+  // Document joint
+  const attachHtml = obj.attachment_path
+    ? '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);margin-bottom:12px">' +
+        '<span style="font-size:18px">' + (obj.attachment_name && obj.attachment_name.endsWith('.pdf') ? '📄' : '🖼') + '</span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (obj.attachment_name||'Document joint') + '</div>' +
+          '<div style="font-size:11px;color:var(--text3)">Document joint</div>' +
+        '</div>' +
+        '<a href="/api/library/objects/' + id + '/attachment" target="_blank" class="btn btn-sm" style="text-decoration:none">↗ Ouvrir</a>' +
+        '<a href="/api/library/objects/' + id + '/attachment" download class="btn btn-sm" style="text-decoration:none">↓</a>' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteObjectAttachment(' + id + ')">✕</button>' +
+      '</div>'
+    : '<div style="margin-bottom:12px">' +
+        '<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-radius:var(--radius);cursor:pointer;font-size:13px;color:var(--text2)">' +
+          '<span>📎</span> Ajouter un document joint (PDF, image...)' +
+          '<input type="file" accept=".pdf,image/*" style="display:none" onchange="uploadObjectAttachment(' + id + ',this)">' +
+        '</label>' +
+      '</div>';
+
   // Calculs notation
   const ratedPrints = linkedPrints.filter(function(p) { return p.rating; });
   const avgRating   = ratedPrints.length
@@ -325,7 +344,7 @@ async function openObjectDetail(id) {
   // Section fichiers
   const filesHtml = obj.files.length === 0
     ? '<p style="color:var(--text3);font-size:13px;padding:12px 0">Aucun fichier. Cliquez "+ Ajouter un fichier".</p>'
-    : '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
+    : '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;' + (obj.files.length > 4 ? 'max-height:340px;overflow-y:auto;padding-right:4px;' : '') + '">' +
         obj.files.map(function(f) {
           const ext      = (f.file_type||'').toUpperCase();
           const extColor = {STL:'#185FA5','3MF':'#1D9E75',OBJ:'#BA7517',GCODE:'#888780',STEP:'#534AB7'}[ext]||'#888780';
@@ -336,6 +355,8 @@ async function openObjectDetail(id) {
             '<div style="flex:1;min-width:0">' +
               '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
                 '<span style="font-size:13px;font-weight:500">' + (f.part_name||f.name) + '</span>' +
+                (f.quantity && f.quantity > 1 ? '<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:#f0fdf4;color:#10b981;font-weight:600">×' + f.quantity + '</span>' : '') +
+                (f.color_ref ? '<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:var(--bg3);color:var(--text2);border:1px solid var(--border)">🎨 ' + f.color_ref + '</span>' : '') +
                 (f.version ? '<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:var(--accent-bg);color:var(--accent);font-weight:500">' + f.version + '</span>' : '') +
               '</div>' +
               (f.changelog ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic">↳ ' + f.changelog + '</div>' : '') +
@@ -349,7 +370,7 @@ async function openObjectDetail(id) {
                 '</button><div id="vh-' + f.id + '" style="display:none;margin-top:4px"></div>' : '') +
             '</div>' +
             '<a href="/api/library/files/' + f.id + '/download" class="btn btn-sm" style="text-decoration:none">↓</a>' +
-            (is3d ? '<button class="btn btn-sm" onclick="openSTLPreview(' + f.id + ',\'' + safeN + '\')" title="Prévisualiser 3D">👁 3D</button>' : '') +
+            (is3d ? '<button class="btn btn-sm" onclick="openSTLPreview(' + f.id + ',\'' + safeN + '\',' + id + ')" title="Prévisualiser 3D">👁 3D</button>' : '') +
             '<button class="btn btn-sm" title="Nouvelle version" onclick="openNewVersionForm(' + f.id + ',\'' + safeN + '\',' + id + ')">⬆ v+</button>' +
             '<button class="btn btn-sm" onclick="openFileEditForm(' + f.id + ')" title="Modifier matières et infos">⚙</button>' +
             '<button class="btn btn-sm" onclick="openPartNameEdit(' + id + ',' + f.id + ',\'' + safeN + '\')">✏</button>' +
@@ -360,8 +381,8 @@ async function openObjectDetail(id) {
 
   // Photo
   const photoHtml = photoUrl
-    ? '<div style="margin-bottom:12px;border-radius:var(--radius-lg);overflow:hidden;max-height:220px;background:var(--bg3)">' +
-        '<img src="' + photoUrl + '" alt="' + obj.name + '" style="width:100%;max-height:220px;object-fit:cover;display:block" onerror="this.parentElement.style.display=\'none\'">' +
+    ? '<div style="margin-bottom:12px;border-radius:var(--radius-lg);overflow:hidden;max-height:220px;background:var(--bg3);display:flex;align-items:center;justify-content:center">' +
+        '<img src="' + photoUrl + '" alt="' + obj.name + '" style="width:100%;max-height:220px;object-fit:contain;display:block" onerror="this.parentElement.style.display=\'none\'">' +
       '</div>'
     : '';
 
@@ -374,7 +395,6 @@ async function openObjectDetail(id) {
   openModal(
     photoHtml +
     '<div style="margin-bottom:16px">' +
-      '<div style="font-size:16px;font-weight:500;margin-bottom:4px">' + obj.name + '</div>' +
       (obj.theme_name ? '<span style="font-size:12px;color:var(--text3)">' + obj.theme_name + '</span>' : '') +
       (obj.description ? '<p style="font-size:13px;color:var(--text2);margin-top:8px">' + obj.description + '</p>' : '') +
       tagsHtml +
@@ -386,7 +406,7 @@ async function openObjectDetail(id) {
       '<button class="btn btn-sm btn-primary" onclick="openUploadForm(' + id + ')">+ Ajouter un fichier</button>' +
     '</div>' +
     filesHtml +
-    (obj.source_url ? '<div style="margin-bottom:12px">' + renderSourceBadge(obj.source_url) + '</div>' : '') +
+    attachHtml +
     '<div class="modal-footer">' +
       '<button class="btn" onclick="closeModal()">Fermer</button>' +
       '<button class="btn" onclick="openQRCode(' + id + ',\'' + obj.name.replace(/'/g,"\\'") + '\')">QR Code</button>' +
@@ -578,7 +598,8 @@ async function saveObject(id) {
       await loadLibraryContent();
       openObjectDetail(saved.id);
     } else {
-      loadLibraryContent();
+      await loadLibraryContent();
+      openObjectDetail(saved.id);
     }
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -611,6 +632,29 @@ async function confirmDeleteObjectFull(id) {
 }
 
 // ── Upload ────────────────────────────────────────────────
+async function uploadObjectAttachment(id, input) {
+  if (!input.files || !input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  try {
+    await fetch('/api/library/objects/' + id + '/attachment', { method: 'POST', body: fd });
+    toast('Document joint ajouté', 'success');
+    await loadLibraryContent();
+    openObjectDetail(id);
+  } catch(e) { toast('Erreur : ' + e.message, 'error'); }
+}
+
+async function deleteObjectAttachment(id) {
+  confirmDelete('Supprimer le document joint ?', async function() {
+    try {
+      await fetch('/api/library/objects/' + id + '/attachment', { method: 'DELETE' });
+      toast('Document supprimé');
+      await loadLibraryContent();
+      openObjectDetail(id);
+    } catch(e) { toast('Erreur : ' + e.message, 'error'); }
+  });
+}
+
 function openUploadForm(prefillObjectId=null) {
   const allT = flatThemes();
   const objectOptions = libraryObjects.map(o=>
@@ -794,6 +838,14 @@ async function openFileEditForm(id) {
         '</select></div>' +
       '<div class="form-group"><label class="form-label">URL source</label>' +
         '<input id="fe-url" value="' + safeUrl.replace(/"/g,'&quot;') + '" type="url"></div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Quantité à imprimer</label>' +
+        '<input id="fe-quantity" type="number" min="1" max="99" value="' + (f.quantity||1) + '" style="width:80px">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Couleur recommandée</label>' +
+        '<input id="fe-color-ref" value="' + (f.color_ref||'').replace(/"/g,'&quot;') + '" placeholder="ex: Blanc, Rouge, Noir...">' +
+      '</div>' +
       '<div class="form-group full"><label class="form-label">Tags</label>' +
         '<input id="fe-tags" value="' + safeTags.replace(/"/g,'&quot;') + '"></div>' +
       '<div class="form-group full"><label class="form-label">Description</label>' +
@@ -823,11 +875,15 @@ async function saveFileEdit(id) {
     tags:                   document.getElementById('fe-tags').value || null,
     description:            document.getElementById('fe-desc').value || null,
     recommended_materials:  selMats.length ? selMats.join(',') : null,
+    quantity:               parseInt(document.getElementById('fe-quantity')?.value) || 1,
+    color_ref:              document.getElementById('fe-color-ref')?.value || null,
   };
   if (!body.name) return toast('Le nom est requis', 'error');
   try {
-    await API.put('/library/files/'+id, body);
-    closeModal(); toast('Fichier mis à jour', 'success'); loadLibraryContent();
+    const updatedFile = await API.put('/library/files/'+id, body);
+    closeModal(); toast('Fichier mis à jour', 'success');
+    await loadLibraryContent();
+    if (updatedFile && updatedFile.object_id) openObjectDetail(updatedFile.object_id);
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -913,14 +969,14 @@ function formatFileSize(bytes) {
 }
 
 // ── Prévisualisation STL 3D ───────────────────────────────
-function openSTLPreview(fileId, fileName) {
+function openSTLPreview(fileId, fileName, objectId) {
   openModal(
     '<div id="stl-viewer-wrap" style="position:relative;width:100%;height:420px;background:var(--bg3);border-radius:var(--radius)">' +
       '<div id="stl-loading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px">Chargement du modèle…</div>' +
       '<canvas id="stl-canvas" style="width:100%;height:100%;display:none;border-radius:var(--radius)"></canvas>' +
     '</div>' +
     '<div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">Clic + glisser pour tourner · Molette pour zoomer</div>' +
-    '<div class="modal-footer"><button class="btn" onclick="closeModal()">Fermer</button></div>',
+    '<div class="modal-footer"><button class="btn" onclick="closeModal();' + (objectId ? 'openObjectDetail(' + objectId + ')' : '') + '">Fermer</button></div>',
     '3D — ' + fileName
   );
 
@@ -1162,6 +1218,7 @@ function detectPlatform(url) {
   if (u.includes('myminifactory.com'))return { name: 'MyMiniFactory', color: '#E91E63', icon: '🩷' };
   if (u.includes('thangs.com'))       return { name: 'Thangs',       color: '#FF6B35', icon: '🟠' };
   if (u.includes('youmagine.com'))    return { name: 'YouMagine',    color: '#00BCD4', icon: '🔵' };
+  if (u.includes('nexprint.com') || u.includes('nexprint.elegoo.com')) return { name: 'Nexprint', color: '#FF4D00', icon: '🔶' };
   return { name: 'Source', color: 'var(--accent)', icon: '🔗' };
 }
 

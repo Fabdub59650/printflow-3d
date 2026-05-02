@@ -266,7 +266,9 @@ CREATE TABLE IF NOT EXISTS library_objects (
   tags          VARCHAR(500) DEFAULT NULL,
   source_url    VARCHAR(500) DEFAULT NULL,
   preview_file_id INT DEFAULT NULL COMMENT 'Fichier STL utilisé comme aperçu',
-  photo_path    VARCHAR(500) DEFAULT NULL COMMENT 'Photo de l objet sur disque',
+  photo_path       VARCHAR(500) DEFAULT NULL COMMENT 'Photo de l objet sur disque',
+  attachment_path  VARCHAR(500) DEFAULT NULL COMMENT 'Document joint (PDF, image...)',
+  attachment_name  VARCHAR(200) DEFAULT NULL COMMENT 'Nom original du document joint',
   created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (theme_id) REFERENCES library_themes(id) ON DELETE SET NULL
@@ -542,6 +544,44 @@ ALTER TABLE printers
 -- ── v2.0.0 — Tapo enabled toggle ─────────────────────────────────────────
 INSERT IGNORE INTO settings (key_name, value) VALUES ('tapo_enabled', 'false');
 
+
+-- ── Base de référence poids bobines vides ────────────────────────────────
+CREATE TABLE IF NOT EXISTS spool_weights (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  brand       VARCHAR(100) NOT NULL  COMMENT 'Fabricant',
+  model       VARCHAR(100) DEFAULT NULL COMMENT 'Modèle / référence',
+  weight_g    DECIMAL(7,2) NOT NULL  COMMENT 'Poids bobine vide (g)',
+  spool_size_g INT DEFAULT 1000      COMMENT 'Taille bobine (g de filament)',
+  diameter_mm DECIMAL(4,2) DEFAULT 1.75,
+  notes       VARCHAR(200) DEFAULT NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Données de référence initiales
+INSERT IGNORE INTO spool_weights (id, brand, model, weight_g, spool_size_g) VALUES
+  (1,  'Bambu Lab',    'Standard AMS',     250, 1000),
+  (2,  'Bambu Lab',    'Lite',             180, 1000),
+  (3,  'Bambu Lab',    'Matte',            250, 1000),
+  (4,  'Elegoo',       'Standard',         220, 1000),
+  (5,  'Elegoo',       'Rapid',            195, 1000),
+  (6,  'Polymaker',    'PolyTerra',        200, 1000),
+  (7,  'Polymaker',    'PolyLite',         210, 1000),
+  (8,  'Prusament',    'Standard',         201, 1000),
+  (9,  'Sunlu',        'Standard',         210, 1000),
+  (10, 'Sunlu',        'S-Eco',            190, 1000),
+  (11, 'Hatchbox',     'Standard',         227, 1000),
+  (12, 'eSUN',         'Standard',         230, 1000),
+  (13, 'eSUN',         'Refill',            80, 1000),
+  (14, 'Fiberlogy',    'Standard',         205, 1000),
+  (15, 'Extrudr',      'Standard',         215, 1000),
+  (16, 'Fillamentum',  'Standard',         220, 1000),
+  (17, 'FormFutura',   'Standard',         210, 1000),
+  (18, 'Raise3D',      'Standard',         230, 1000),
+  (19, 'ColorFabb',    'Standard',         215, 1000),
+  (20, 'Generic',      'Carton',           150, 1000),
+  (21, 'Generic',      'Plastique leger',  180, 1000),
+  (22, 'Generic',      'Plastique lourd',  250, 1000);
+
 -- ── v2.1.0 — Devis client ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS quotes (
   id              INT AUTO_INCREMENT PRIMARY KEY,
@@ -616,6 +656,7 @@ INSERT IGNORE INTO settings (key_name, value) VALUES ('quotes_enabled', 'true');
 
 -- ── v2.2.0 — Galerie photos ──────────────────────────────────────────────
 INSERT IGNORE INTO settings (key_name, value) VALUES ('gallery_enabled', 'true');
+INSERT IGNORE INTO settings (key_name, value) VALUES ('accent_color', '#185FA5');
 
 -- ── v2.3.0 — Bobines partielles ──────────────────────────────────────────
 -- Lien optionnel vers un filament "parent" (même matière/couleur)

@@ -94,7 +94,8 @@ app.use('/api/tapo',     require('./routes/tapo'));
 
 // Devis client
 app.use('/api/quotes',    require('./routes/quotes'));
-app.use('/api/schedule',   require('./routes/schedule'));
+app.use('/api/schedule',      require('./routes/schedule'));
+app.use('/api/spool-weights', require('./routes/spool-weights'));
 // Rapport hebdomadaire
 app.use('/api/report', require('./routes/report'));
 

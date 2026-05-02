@@ -1005,6 +1005,10 @@ function selectTheme(name) {
   });
   // Prévisualiser immédiatement
   applyTheme(name);
+  // Sauvegarder immédiatement sans attendre le bouton Enregistrer
+  API.put('/settings', { theme: name }).catch(function(e) {
+    console.error('[Theme] Erreur sauvegarde :', e.message);
+  });
 }
 
 // ── Sauvegarder tous les paramètres ──────────────────────
@@ -1988,4 +1992,102 @@ async function testTelegram() {
   } catch(e) {
     if (result) { result.textContent = '✗ ' + e.message; result.style.color = 'var(--danger)'; }
   }
+}
+
+// ── Base de référence poids bobines vides ─────────────────────────────────
+
+async function loadSpoolWeights() {
+  const el = document.getElementById('spool-weights-list');
+  if (!el) return;
+  try {
+    const list = await API.get('/spool-weights');
+    if (!list.length) {
+      el.innerHTML = '<span style="color:var(--text3);font-size:13px">Aucune entrée.</span>';
+      return;
+    }
+    // Grouper par fabricant
+    const byBrand = {};
+    list.forEach(function(s) {
+      if (!byBrand[s.brand]) byBrand[s.brand] = [];
+      byBrand[s.brand].push(s);
+    });
+    el.innerHTML = '<table><thead><tr>' +
+      '<th>Fabricant</th><th>Modèle</th><th>Tare (g)</th><th>Taille bobine</th><th></th>' +
+      '</tr></thead><tbody>' +
+      list.map(function(s) {
+        return '<tr>' +
+          '<td style="font-weight:500">' + s.brand + '</td>' +
+          '<td style="color:var(--text3)">' + (s.model||'—') + '</td>' +
+          '<td style="font-weight:600;color:var(--accent)">' + s.weight_g + ' g</td>' +
+          '<td style="font-size:12px;color:var(--text3)">' + (s.spool_size_g||1000) + ' g</td>' +
+          '<td style="text-align:right;white-space:nowrap">' +
+            '<button class="btn btn-sm" onclick="editSpoolWeight(' + s.id + ')">✏</button> ' +
+            '<button class="btn btn-sm btn-danger" onclick="deleteSpoolWeight(' + s.id + ')">✕</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table>';
+  } catch(e) { if (el) el.innerHTML = '<span style="color:var(--danger)">' + e.message + '</span>'; }
+}
+
+function openAddSpoolWeight(existing) {
+  const s = existing || {};
+  openModal(
+    '<div class="form-grid">' +
+      '<div class="form-group">' +
+        '<label class="form-label">Fabricant *</label>' +
+        '<input id="sw-brand" value="' + (s.brand||'') + '" placeholder="ex: Bambu Lab">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Modèle</label>' +
+        '<input id="sw-model" value="' + (s.model||'') + '" placeholder="ex: Standard AMS">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Poids bobine vide (g) *</label>' +
+        '<input id="sw-weight" type="number" step="0.1" min="0" value="' + (s.weight_g||'') + '" placeholder="ex: 250">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Taille bobine (g de filament)</label>' +
+        '<input id="sw-size" type="number" value="' + (s.spool_size_g||1000) + '">' +
+      '</div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="saveSpoolWeight(' + (s.id||'null') + ')">' + (s.id ? 'Enregistrer' : 'Ajouter') + '</button>' +
+    '</div>',
+    s.id ? 'Modifier l\'entrée' : 'Ajouter un poids de référence'
+  );
+}
+
+async function saveSpoolWeight(id) {
+  const brand  = document.getElementById('sw-brand')?.value?.trim();
+  const weight = document.getElementById('sw-weight')?.value;
+  if (!brand || !weight) return toast('Fabricant et poids requis', 'error');
+  const body = {
+    brand,
+    model:        document.getElementById('sw-model')?.value || null,
+    weight_g:     parseFloat(weight),
+    spool_size_g: parseInt(document.getElementById('sw-size')?.value) || 1000,
+  };
+  try {
+    if (id) await API.put('/spool-weights/' + id, body);
+    else     await API.post('/spool-weights', body);
+    closeModal();
+    toast(id ? 'Entrée mise à jour' : 'Entrée ajoutée', 'success');
+    loadSpoolWeights();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function editSpoolWeight(id) {
+  const list = await API.get('/spool-weights');
+  const s = list.find(function(x){ return x.id === id; });
+  if (s) openAddSpoolWeight(s);
+}
+
+async function deleteSpoolWeight(id) {
+  confirmDelete('Supprimer cette entrée de la base ?', async function() {
+    await API.del('/spool-weights/' + id);
+    toast('Entrée supprimée');
+    loadSpoolWeights();
+  });
 }

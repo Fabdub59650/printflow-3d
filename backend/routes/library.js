@@ -324,20 +324,21 @@ router.get('/files/:id', async (req, res) => {
 
 router.put('/files/:id', async (req, res) => {
   try {
-    const { name, theme_id, object_id, part_name, description, tags, source_url, recommended_materials } = req.body;
-    // Si object_id absent du body, on le préserve (undefined = non envoyé par le form d'édition)
+    const { name, theme_id, object_id, part_name, description, tags, source_url, recommended_materials, quantity, color_ref } = req.body;
     const hasObjectId = Object.prototype.hasOwnProperty.call(req.body, 'object_id');
     let sql, params;
     if (hasObjectId) {
       sql = `UPDATE library_files SET name=?,theme_id=?,object_id=?,part_name=?,
-             description=?,tags=?,source_url=?,recommended_materials=? WHERE id=?`;
+             description=?,tags=?,source_url=?,recommended_materials=?,quantity=?,color_ref=? WHERE id=?`;
       params = [name, theme_id||null, object_id||null, part_name||null,
-                description||null, tags||null, source_url||null, recommended_materials||null, req.params.id];
+                description||null, tags||null, source_url||null, recommended_materials||null,
+                quantity||1, color_ref||null, req.params.id];
     } else {
       sql = `UPDATE library_files SET name=?,theme_id=?,
-             description=?,tags=?,source_url=?,recommended_materials=? WHERE id=?`;
+             description=?,tags=?,source_url=?,recommended_materials=?,quantity=?,color_ref=? WHERE id=?`;
       params = [name, theme_id||null,
-                description||null, tags||null, source_url||null, recommended_materials||null, req.params.id];
+                description||null, tags||null, source_url||null, recommended_materials||null,
+                quantity||1, color_ref||null, req.params.id];
     }
     await db.query(sql, params);
     const [[f]] = await db.query('SELECT * FROM library_files WHERE id=?', [req.params.id]);
@@ -447,6 +448,75 @@ router.delete('/objects/:id/photo', async (req, res) => {
 });
 
 // ── Tags ─────────────────────────────────────────────────
+
+// POST /api/library/objects/:id/attachment — upload document joint
+router.post('/objects/:id/attachment', photoUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
+    const libPath = await getLibraryPath();
+
+    // Supprimer l'ancien document s'il existe
+    const [[obj]] = await db.query('SELECT attachment_path FROM library_objects WHERE id=?', [req.params.id]);
+    if (obj && obj.attachment_path) {
+      const oldPath = path.join(libPath, obj.attachment_path);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+
+    const ext      = req.file.originalname.split('.').pop().toLowerCase() || 'pdf';
+    const hash     = crypto.createHash('sha1').update(req.file.buffer).digest('hex').slice(0, 12);
+    const diskName = 'attach_' + hash + '.' + ext;
+    // Corriger l'encodage latin-1 → UTF-8 si nécessaire (multer peut mal décoder)
+    let origName = req.file.originalname;
+    try {
+      origName = Buffer.from(origName, 'latin1').toString('utf8');
+      if (origName.includes('â€') || origName.includes('Ã')) origName = req.file.originalname;
+    } catch(_) {}
+    fs.writeFileSync(path.join(libPath, diskName), req.file.buffer);
+
+    await db.query(
+      'UPDATE library_objects SET attachment_path=?, attachment_name=? WHERE id=?',
+      [diskName, origName, req.params.id]
+    );
+    res.json({ ok: true, attachment_path: diskName, attachment_name: origName });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/library/objects/:id/attachment — télécharger le document joint
+router.get('/objects/:id/attachment', async (req, res) => {
+  try {
+    const libPath = await getLibraryPath();
+    const [[obj]] = await db.query(
+      'SELECT attachment_path, attachment_name FROM library_objects WHERE id=?', [req.params.id]
+    );
+    if (!obj || !obj.attachment_path) return res.status(404).json({ error: 'Pas de document joint' });
+    const fp = path.join(libPath, obj.attachment_path);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Fichier introuvable' });
+    const ext  = path.extname(fp).slice(1).toLowerCase();
+    const mime = {
+      pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+      png: 'image/png', webp: 'image/webp', gif: 'image/gif'
+    }[ext] || 'application/octet-stream';
+    const safeName = encodeURIComponent(obj.attachment_name || 'document');
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', "inline; filename*=UTF-8''" + safeName);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    fs.createReadStream(fp).pipe(res);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/library/objects/:id/attachment — supprimer le document joint
+router.delete('/objects/:id/attachment', async (req, res) => {
+  try {
+    const libPath = await getLibraryPath();
+    const [[obj]] = await db.query('SELECT attachment_path FROM library_objects WHERE id=?', [req.params.id]);
+    if (obj && obj.attachment_path) {
+      const fp = path.join(libPath, obj.attachment_path);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      await db.query('UPDATE library_objects SET attachment_path=NULL, attachment_name=NULL WHERE id=?', [req.params.id]);
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // GET /api/library/tags
 router.get('/tags', async (req, res) => {
   try {

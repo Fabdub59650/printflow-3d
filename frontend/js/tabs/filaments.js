@@ -479,6 +479,11 @@ function renderFilamentGrid() {
                       onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background=''">
                       Bobine partielle
                     </div>` : ''}
+                    <div onclick="duplicateFilament(${f.id});closeFilamentMenu()"
+                      style="padding:8px 14px;font-size:13px;cursor:pointer;color:var(--text)"
+                      onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background=''">
+                      Dupliquer
+                    </div>
                     <div onclick="quickToggleArchive(${f.id},${f.archived?1:0});closeFilamentMenu()"
                       style="padding:8px 14px;font-size:13px;cursor:pointer;color:var(--text);border-top:1px solid var(--border);margin-top:4px"
                       onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background=''">
@@ -494,8 +499,10 @@ function renderFilamentGrid() {
     </div>`).join('');
 }
 
-function openFilamentForm(id = null, defaultParentId = null) {
-  const f = id ? allFilaments.find(x => x.id === id) : {};
+function openFilamentForm(id = null, defaultParentId = null, sourceData = null) {
+  // sourceData : données pré-remplies pour duplication
+  const f = sourceData || (id ? allFilaments.find(x => x.id === id) : {});
+  const isDuplicate = !!sourceData;
   const parentId = f.parent_filament_id || defaultParentId || null;
 
   // Filaments éligibles comme parents (non partiels, non archivés, pas soi-même)
@@ -588,7 +595,14 @@ function openFilamentForm(id = null, defaultParentId = null) {
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr ${window._showPrices ? '1fr' : ''};gap:10px;margin-bottom:14px">
       <div><label class="form-label">Poids total (g)</label><input id="ff-wtot" type="number" value="${f.weight_total||1000}" oninput="validateWeights()"></div>
       <div><label class="form-label">Poids restant (g)</label><input id="ff-wrem" type="number" value="${f.weight_remaining||1000}" oninput="validateWeights()"></div>
-      <div><label class="form-label">Poids bobine vide (g)</label><input id="ff-spool" type="number" step="0.1" value="${f.spool_weight||''}" placeholder="ex: 230"></div>
+      <div>
+        <label class="form-label">Poids bobine vide (g)</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="ff-spool" type="number" step="0.1" value="${f.spool_weight||''}" placeholder="ex: 230" style="flex:1">
+          <button type="button" class="btn btn-sm" onclick="openSpoolWeightPicker()" title="Choisir depuis la base">📋</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Ou choisissez depuis la base de référence</div>
+      </div>
       ${window._showPrices ? `<div><label class="form-label">Prix (€/kg)</label><input id="ff-price" type="number" step="0.01" value="${f.price||''}"></div>` : ''}
     </div>
 
@@ -650,7 +664,7 @@ function openFilamentForm(id = null, defaultParentId = null) {
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" onclick="saveFilament(${id||'null'})">Enregistrer</button>
-    </div>`, id ? 'Modifier filament' : (defaultParentId ? 'Ajouter une bobine partielle' : 'Ajouter un filament'), { wide: true });
+    </div>`, id ? 'Modifier filament' : (isDuplicate ? 'Nouveau filament (copie de ' + (f.name||'') + ')' : (defaultParentId ? 'Ajouter une bobine partielle' : 'Ajouter un filament')), { wide: true });
 }
 
 function validateWeights() {
@@ -1522,6 +1536,95 @@ function closeFilamentMenu() {
 
 function closeFilamentMenuOnClick() {
   closeFilamentMenu();
+}
+
+// ── Sélecteur poids bobine vide ──────────────────────────────────────────
+
+async function openSpoolWeightPicker() {
+  let spoolWeights = [];
+  try { spoolWeights = await API.get('/spool-weights'); } catch(_) {}
+
+  // Grouper par fabricant
+  const byBrand = {};
+  spoolWeights.forEach(function(s) {
+    if (!byBrand[s.brand]) byBrand[s.brand] = [];
+    byBrand[s.brand].push(s);
+  });
+
+  const html =
+    '<div style="margin-bottom:12px">' +
+      '<input id="spool-picker-search" placeholder="Rechercher fabricant..." ' +
+        'oninput="filterSpoolPicker(this.value)" ' +
+        'style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);' +
+        'background:var(--bg3);color:var(--text);font-size:13px">' +
+    '</div>' +
+    '<div id="spool-picker-list" style="max-height:350px;overflow-y:auto">' +
+      Object.entries(byBrand).map(function(entry) {
+        const brand = entry[0];
+        const models = entry[1];
+        return '<div class="spool-brand-group" data-brand="' + brand.toLowerCase() + '">' +
+          '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;' +
+            'letter-spacing:0.05em;padding:10px 0 4px;border-top:1px solid var(--border)">' + brand + '</div>' +
+          models.map(function(s) {
+            return '<div onclick="selectSpoolWeight(' + s.weight_g + ',\'' + brand + ' ' + (s.model||'') + '\')" ' +
+              'style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;' +
+              'border-radius:var(--radius);cursor:pointer;margin-bottom:2px" ' +
+              'onmouseenter="this.style.background=\'var(--bg3)\'" onmouseleave="this.style.background=\'\'">' +
+              '<span style="font-size:13px">' + (s.model || 'Standard') +
+                (s.spool_size_g ? ' <span style="font-size:11px;color:var(--text3)">(' + s.spool_size_g + 'g)</span>' : '') +
+              '</span>' +
+              '<span style="font-size:13px;font-weight:600;color:var(--accent)">' + s.weight_g + ' g</span>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      }).join('') +
+    '</div>' +
+    '<div class="modal-footer" style="margin-top:12px">' +
+      '<button class="btn" onclick="closeModal2()">Annuler</button>' +
+    '</div>';
+
+  openModal2(html, 'Base de référence — Poids bobines vides');
+}
+
+function filterSpoolPicker(query) {
+  const q = query.toLowerCase();
+  document.querySelectorAll('.spool-brand-group').forEach(function(el) {
+    el.style.display = !q || el.dataset.brand.includes(q) ? 'block' : 'none';
+  });
+}
+
+function selectSpoolWeight(weight, label) {
+  const input = document.getElementById('ff-spool');
+  if (input) {
+    input.value = weight;
+    input.focus();
+  }
+  closeModal2();
+  toast('Tare appliquée : ' + weight + 'g (' + label.trim() + ')', 'success');
+}
+
+// ── Duplication d'un filament ─────────────────────────────────────────────
+async function duplicateFilament(id) {
+  try {
+    const f = await API.get('/filaments/' + id);
+
+    // Préparer la copie — remettre à zéro les champs spécifiques à la bobine
+    const copy = Object.assign({}, f, {
+      id:            undefined,
+      spool_number:  '',           // N° bobine vide
+      nfc_uid:       null,         // NFC non lié
+      purchase_date: null,         // Date d'achat vide
+      weight_remaining: f.weight_total, // Bobine neuve = pleine
+      created_at:    undefined,
+      updated_at:    undefined,
+    });
+
+    // Ouvrir le formulaire avec les données pré-remplies
+    // On passe null comme id (nouveau) mais on pré-remplit via _duplicateSource
+    window._duplicateSource = copy;
+    openFilamentForm(null, null, copy);
+
+  } catch(e) { toast('Erreur : ' + e.message, 'error'); }
 }
 
 function openFilamentQR(id) {

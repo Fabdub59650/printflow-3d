@@ -637,10 +637,18 @@ function kioskFetch(path, opts) {
   return fetch(API_BASE + '/api' + path, Object.assign({}, opts || {}, { headers }));
 }
 
-async function apiGet(path) {
-  const r = await kioskFetch(path);
-  if (!r.ok) throw new Error(r.status);
-  return r.json();
+async function apiGet(path, _retry) {
+  try {
+    const r = await kioskFetch(path);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  } catch(e) {
+    if (!_retry) {
+      await new Promise(function(resolve){ setTimeout(resolve, 2000); });
+      return apiGet(path, true);
+    }
+    throw e;
+  }
 }
 
 // ── Rendu imprimante ──────────────────────────────────────────────────────
@@ -1498,6 +1506,51 @@ initTheme();
 initNfcSse();
 kioskRefresh(false);
 _refreshTimer = setInterval(kioskRefresh, REFRESH_MS);
+
+// ── Anti-gel : Page Visibility API ───────────────────────────────────────
+// Forcer un refresh immédiat quand l'écran se rallume ou la page redevient visible
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden) {
+    console.log('[Kiosk] Page redevenue visible — refresh forcé');
+    kioskRefresh(false);
+  }
+});
+
+// ── Watchdog : vérifier que le setInterval tourne encore ─────────────────
+// Si l'horloge JS est gelée depuis > 30s, relancer le timer
+let _lastClockTick = Date.now();
+const _origUpdateClock = updateClock;
+// Wrapper updateClock pour tracer le dernier tick
+window.addEventListener('focus', function() {
+  console.log('[Kiosk] Focus récupéré — refresh forcé');
+  kioskRefresh(false);
+});
+
+// Watchdog externe : toutes les 15s, vérifier que le dernier refresh
+// date de moins de 2× REFRESH_MS, sinon relancer
+setInterval(function() {
+  _lastClockTick = Date.now();
+}, 5000);
+
+// Relance du timer principal si inactif trop longtemps
+let _lastRefreshTime = Date.now();
+const _origKioskRefresh = kioskRefresh;
+// Patch kioskRefresh pour tracer le dernier appel
+async function kioskRefreshTracked(manual) {
+  _lastRefreshTime = Date.now();
+  return _origKioskRefresh(manual);
+}
+
+setInterval(function() {
+  const elapsed = Date.now() - _lastRefreshTime;
+  if (elapsed > REFRESH_MS * 3) {
+    console.warn('[Kiosk] Watchdog : refresh inactif depuis ' + Math.round(elapsed/1000) + 's — relance');
+    clearInterval(_refreshTimer);
+    _refreshTimer = setInterval(kioskRefresh, REFRESH_MS);
+    kioskRefresh(false);
+    _lastRefreshTime = Date.now();
+  }
+}, 15000);
 </script>
 </body>
 </html>

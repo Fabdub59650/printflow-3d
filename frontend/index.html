@@ -51,6 +51,10 @@
         <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3"/><path d="M10 3v4M10 13v4M3 10h4M13 10h4"/></svg>
         Filaments
       </a>
+      <a href="#" class="nav-item" data-tab="spoolweights">
+        <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="M10 3v14M3 10h14"/><circle cx="10" cy="10" r="2" fill="currentColor"/></svg>
+        Bobines réf.
+      </a>
       <a href="#" class="nav-item" data-tab="library">
         <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="5" height="7" rx="1"/><rect x="3" y="12" width="5" height="5" rx="1"/><rect x="10" y="3" width="7" height="14" rx="1"/></svg>
         Bibliothèque
@@ -222,6 +226,8 @@
 
 <div id="modal-overlay" class="hidden" onclick="closeModal()"></div>
 <div id="modal" class="modal hidden"></div>
+<div id="modal2-overlay" class="hidden" onclick="closeModal2()" style="z-index:1001"></div>
+<div id="modal2" class="modal hidden" style="z-index:1002"></div>
 <div id="toast-container"></div>
 
 <script>
@@ -246,6 +252,7 @@ window.onerror = function(msg, src, line, col, err) {
 <script src="/js/tabs/prints.js"></script>
 <script src="/js/tabs/projects.js"></script>
 <script src="/js/tabs/filaments.js"></script>
+<script src="/js/tabs/spoolweights.js"></script>
 <script src="/js/tabs/library.js"></script>
 <script src="/js/tabs/maintenance.js"></script>
 <script src="/js/tabs/stats.js"></script>

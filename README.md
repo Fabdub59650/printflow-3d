@@ -2,7 +2,7 @@
 
 **Logiciel de gestion d'impressions 3D** — conçu pour tourner sur Raspberry Pi avec une interface web accessible depuis n'importe quel appareil du réseau local.
 
-![Version](https://img.shields.io/badge/version-2.7.0-blue)
+![Version](https://img.shields.io/badge/version-2.8.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
@@ -39,6 +39,8 @@
 - **NFC/RFID** — lecture/écriture puces ELEGOO NTAG213/215/216 (ACR122U)
 - Format ELEGOO natif supporté
 - **Fournisseur et date d'achat** par bobine
+- **Base de référence poids bobines vides** — onglet dédié, sélection automatique de la tare
+- **Duplication** — copier une fiche filament en un clic
 
 ### 📄 Devis client *(optionnel)*
 - **Multi-lignes** — plusieurs articles par devis avec calcul par ligne
@@ -142,7 +144,8 @@ Interface accessible sur **`http://[IP-du-Pi]`** (port 80, proxifié depuis Node
 
 | Version | Date | Highlights |
 |---------|------|-----------|
-| **2.7.0** | 21/04/2026 | Stats rentabilité, clavier kiosque, fournisseur filament, corrections bugs, rotation écran |
+| **2.8.0** | 24/04/2026 | Base référence bobines, duplication filament, doc joint bibliothèque, anti-gel kiosque |
+| 2.7.0 | 21/04/2026 | Stats rentabilité, clavier kiosque, fournisseur filament, corrections bugs, rotation écran |
 | 2.6.0 | 20/04/2026 | Devis multi-lignes, coût réel impressions, galerie améliorée, rapport enrichi, notifications Telegram, sauvegarde NAS |
 | 2.5.0 | 19/04/2026 | Mode kiosque tactile 1024×600, 3 imprimantes, pesée avec pavé numérique, bypass auth localhost |
 | 2.4.0 | 16/04/2026 | Générateur d'étiquettes, comparaison imprimantes, rapport PDF, calendrier planning, toggle thème |

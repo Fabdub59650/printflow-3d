@@ -634,4 +634,130 @@ router.get('/profitability', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/stats/lifetime — compteurs "depuis le début"
+router.get('/lifetime', async (req, res) => {
+  try {
+    // Totaux impressions
+    const [[prints]] = await db.query(`
+      SELECT
+        COUNT(*)                                          AS total_prints,
+        SUM(status='done')                               AS total_done,
+        SUM(status='failed')                             AS total_failed,
+        ROUND(SUM(actual_duration)/60, 1)               AS total_hours,
+        ROUND(SUM(filament_used), 0)                    AS total_grams,
+        ROUND(SUM(real_cost), 2)                        AS total_cost,
+        COUNT(DISTINCT filament_id)                     AS unique_filaments,
+        COUNT(DISTINCT printer_id)                      AS active_printers
+      FROM prints
+      WHERE status IN ('done','failed','cancelled')
+    `);
+
+    // Taux de réussite
+    const successRate = prints.total_prints > 0
+      ? Math.round(prints.total_done / prints.total_prints * 100)
+      : 0;
+
+    // Filament en km (PLA densité 1.24 g/cm³, diamètre 1.75mm)
+    // Volume = masse / densité → longueur = volume / section
+    // section = π × (0.0875cm)² ≈ 0.02405 cm²
+    const totalGrams = parseFloat(prints.total_grams || 0);
+    const filamentKm = Math.round(totalGrams / 1.24 / 0.02405 / 100) / 10; // en mètres / 1000 = km
+
+    // Bobines utilisées (filaments avec des impressions liées)
+    const [[spools]] = await db.query(`
+      SELECT COUNT(DISTINCT filament_id) AS count
+      FROM prints WHERE filament_id IS NOT NULL AND status='done'
+    `);
+
+    // Imprimante la plus utilisée
+    const [[topPrinter]] = await db.query(`
+      SELECT pr.name, COUNT(*) AS cnt
+      FROM prints p JOIN printers pr ON pr.id = p.printer_id
+      WHERE p.status = 'done'
+      GROUP BY pr.id ORDER BY cnt DESC LIMIT 1
+    `).catch(function(){ return [[null]]; });
+
+    // Matière la plus utilisée
+    const [[topMaterial]] = await db.query(`
+      SELECT f.material, ROUND(SUM(p.filament_used),0) AS total_g
+      FROM prints p JOIN filaments f ON f.id = p.filament_id
+      WHERE p.status = 'done' AND f.material IS NOT NULL
+      GROUP BY f.material ORDER BY total_g DESC LIMIT 1
+    `).catch(function(){ return [[null]]; });
+
+    res.json({
+      total_prints:    parseInt(prints.total_prints || 0),
+      total_done:      parseInt(prints.total_done   || 0),
+      total_failed:    parseInt(prints.total_failed || 0),
+      total_hours:     parseFloat(prints.total_hours || 0),
+      total_grams:     totalGrams,
+      total_cost:      parseFloat(prints.total_cost || 0),
+      filament_km:     filamentKm,
+      success_rate:    successRate,
+      spools_used:     parseInt(spools.count || 0),
+      top_printer:     topPrinter?.name || null,
+      top_material:    topMaterial?.material || null,
+      top_material_g:  topMaterial?.total_g || 0,
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/stats/weekly-highlights — records de la semaine
+router.get('/weekly-highlights', async (req, res) => {
+  try {
+    const since = new Date();
+    since.setDate(since.getDate() - 7);
+    const sinceStr = since.toISOString().slice(0,19).replace('T',' ');
+
+    // Impression la plus longue
+    const [[longest]] = await db.query(`
+      SELECT name, actual_duration FROM prints
+      WHERE status='done' AND actual_duration IS NOT NULL AND created_at >= ?
+      ORDER BY actual_duration DESC LIMIT 1
+    `, [sinceStr]).catch(function(){ return [[null]]; });
+
+    // Imprimante la plus active
+    const [[topPrinter]] = await db.query(`
+      SELECT pr.name, COUNT(*) AS cnt, ROUND(SUM(p.actual_duration)/60,1) AS hours
+      FROM prints p JOIN printers pr ON pr.id = p.printer_id
+      WHERE p.status = 'done' AND p.created_at >= ?
+      GROUP BY pr.id ORDER BY cnt DESC LIMIT 1
+    `, [sinceStr]).catch(function(){ return [[null]]; });
+
+    // Filament le plus consommé
+    const [[topFilament]] = await db.query(`
+      SELECT f.name, f.material, f.color_hex, ROUND(SUM(p.filament_used),0) AS total_g
+      FROM prints p JOIN filaments f ON f.id = p.filament_id
+      WHERE p.status = 'done' AND p.created_at >= ?
+      GROUP BY f.id ORDER BY total_g DESC LIMIT 1
+    `, [sinceStr]).catch(function(){ return [[null]]; });
+
+    // Impression la mieux notée
+    const [[bestRated]] = await db.query(`
+      SELECT name, rating FROM prints
+      WHERE status='done' AND rating IS NOT NULL AND created_at >= ?
+      ORDER BY rating DESC, created_at DESC LIMIT 1
+    `, [sinceStr]).catch(function(){ return [[null]]; });
+
+    // Totaux de la semaine
+    const [[weekTotals]] = await db.query(`
+      SELECT COUNT(*) AS count, SUM(status='done') AS done,
+             ROUND(SUM(filament_used),0) AS grams,
+             ROUND(SUM(actual_duration)/60,1) AS hours
+      FROM prints WHERE created_at >= ?
+    `, [sinceStr]);
+
+    res.json({
+      longest_print:  longest  ? { name: longest.name,  duration: longest.actual_duration  } : null,
+      top_printer:    topPrinter ? { name: topPrinter.name, count: topPrinter.cnt, hours: topPrinter.hours } : null,
+      top_filament:   topFilament ? { name: topFilament.name, material: topFilament.material, color_hex: topFilament.color_hex, grams: topFilament.total_g } : null,
+      best_rated:     bestRated ? { name: bestRated.name, rating: bestRated.rating } : null,
+      week_count:     parseInt(weekTotals?.count || 0),
+      week_done:      parseInt(weekTotals?.done  || 0),
+      week_grams:     parseFloat(weekTotals?.grams || 0),
+      week_hours:     parseFloat(weekTotals?.hours || 0),
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

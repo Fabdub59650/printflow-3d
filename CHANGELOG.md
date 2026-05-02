@@ -230,3 +230,34 @@
 - **Filament — Champ Date d'achat**
 - `--disk-cache-size=0` dans Chromium kiosque (évite les problèmes de cache)
 - `setup-kiosk.sh` — option rotation écran 180° + installation xinput automatique
+
+---
+
+## [2.8.0] — 2026-04-24
+
+### Ajouté
+- **Thème de couleur** — sauvegarde immédiate au clic sans bouton Enregistrer (8 couleurs)
+- **Base de référence poids bobines vides** — nouvel onglet "Bobines réf." dans la navigation
+  - 22 entrées préremplies (Bambu Lab, Elegoo, Polymaker, Prusament, Sunlu, Hatchbox, eSUN...)
+  - Bouton 📋 dans le formulaire filament pour sélectionner la tare automatiquement
+  - Gestion complète : Ajouter, Modifier, Supprimer
+- **Duplication filament** — bouton "Dupliquer" dans le menu ••• (tare, NFC, N° bobine et date remis à zéro)
+- **Bibliothèque — Document joint** — PDF ou image attaché à un objet (aperçu, téléchargement, suppression)
+- **Bibliothèque — Quantité et couleur** — champs Quantité et Couleur recommandée dans la fiche élément
+- **Bibliothèque — Nexprint** — badge coloré pour les liens ELEGOO Nexprint
+- **Kiosque — Anti-gel** — Page Visibility API + watchdog + retry réseau pour éviter le gel après inactivité
+- **second modal (modal2)** — pour les sélecteurs par-dessus les formulaires (picker bobines)
+
+### Corrigé
+- Fiche objet bibliothèque : nom affiché deux fois (supprimé dans le corps)
+- Fiche objet bibliothèque : photo tronquée en galerie et en fiche → object-fit:contain
+- Fiche objet bibliothèque : retour bibliothèque après modif fichier → rouvre la fiche
+- Fiche objet bibliothèque : retour bibliothèque après modif objet → rouvre la fiche
+- Fiche objet bibliothèque : bouton Source en double → supprimé du bas
+- Fiche objet bibliothèque : liste fichiers longue → ascenseur vertical si > 4 fichiers
+- Vue 3D STL : retour bibliothèque à la fermeture → rouvre la fiche objet
+- Kiosque : sélection poids bobine fermait le formulaire filament → modal2 indépendant
+- Token auth : cookie persistant 1 an (survit au vidage du cache navigateur)
+- Chemin photos impressions lu depuis settings (prints_photo_path) dans la sauvegarde
+- Mot de passe NAS chiffré AES-256-GCM
+- Métadonnées sauvegardes stockées en BDD (visible même si NAS non monté)

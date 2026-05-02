@@ -36,6 +36,23 @@ function closeModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
 }
 
+function openModal2(html, title) {
+  const modal = document.getElementById('modal2');
+  modal.innerHTML =
+    '<div class="modal-header">' +
+      '<span class="modal-title">' + title + '</span>' +
+      '<button class="btn btn-sm" onclick="closeModal2()">✕</button>' +
+    '</div>' + html;
+  modal.classList.remove('hidden');
+  document.getElementById('modal2-overlay').classList.remove('hidden');
+}
+
+function closeModal2() {
+  const modal = document.getElementById('modal2');
+  modal.classList.add('hidden');
+  document.getElementById('modal2-overlay').classList.add('hidden');
+}
+
 function openPrinterIframe(printer) {
   if (!printer.interface_url) return toast('Aucune URL définie pour cette imprimante', 'error');
   document.getElementById('iframe-modal-title').textContent = printer.name + ' — ' + (printer.interface_type || 'Interface');
