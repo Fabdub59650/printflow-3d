@@ -1,31 +1,27 @@
-# Certificats et clés SSL
-*.crt
-*.pem
-*.key
-*.p12
-
-# Sauvegardes
-backups/
-backup/
-
-# Photos et uploads
-prints/
-frontend/uploads/
-
-# Bibliothèque (fichiers STL/3MF volumineux)
-library/
-
-# Node
+# Dépendances Node.js
 node_modules/
-backend/node_modules/
+npm-debug.log*
+
+# Variables d'environnement — NE JAMAIS commiter
+.env
+.env.*
+!.env.example
+
+# Bibliothèque — fichiers STL/3MF/photos (trop volumineux)
+library/
+backups/
 
 # Logs
 *.log
-npm-debug.log*
+logs/
 
-# Environnement
-.env
-.env.local
+# OS
+.DS_Store
+Thumbs.db
 
-# Clé de chiffrement
-backend/.key
+# IDE
+.vscode/
+.idea/
+
+# Build
+dist/

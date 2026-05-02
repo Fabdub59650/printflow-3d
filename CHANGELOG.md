@@ -287,3 +287,11 @@
 - Onglet Système vide — `process.version` non disponible dans le navigateur
 - Version affichée 0.0.0 dans l'updater — lecture depuis package.json en fallback
 - Bibliothèque stats : `file_count` → `total_files` (undefined affiché)
+
+---
+
+## [2.9.1] — 2026-05-02
+
+### Corrigé
+- Export Excel : erreur de syntaxe JS sur les boutons (apostrophes dans window.open)
+- Export Excel : fonction exportExcel() ajoutée globalement dans app.js

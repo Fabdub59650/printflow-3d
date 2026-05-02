@@ -24,6 +24,7 @@ function quoteBadge(status) {
 async function renderQuotes() {
   document.getElementById('page-title').textContent = 'Devis';
   document.getElementById('topbar-actions').innerHTML =
+    '<button class="btn" onclick="exportExcel(this)" data-url="/api/excel/devis">&#8595; Excel</button> ' +
     '<button class="btn btn-primary" onclick="openQuoteForm()">+ Nouveau devis</button>';
   document.getElementById('content').innerHTML =
     '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';

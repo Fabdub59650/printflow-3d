@@ -19,6 +19,7 @@ async function renderPrints() {
     document.head.appendChild(s);
   }
   document.getElementById('topbar-actions').innerHTML =
+    '<button class="btn" onclick="exportExcel(this)" data-url="/api/excel/impressions">&#8595; Excel</button> ' +
     '<button class="btn btn-primary" onclick="openPrintForm()">+ Nouvelle impression</button>';
   document.getElementById('content').innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 

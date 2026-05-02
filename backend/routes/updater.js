@@ -38,7 +38,7 @@ router.get('/check', async (req, res) => {
     if (!ghRes.ok) throw new Error('GitHub API : ' + ghRes.status);
     const release = await ghRes.json();
 
-    const latestVersion = release.tag_name.replace(/^v/, '');
+    const latestVersion = release.tag_name.replace(/^[vV]\.?/, '');
     const isNewer = compareVersions(latestVersion, currentVersion) > 0;
 
     res.json({

@@ -402,3 +402,10 @@ function toggleDarkMode() {
     setTimeout(update, 100);
   }
 })();
+
+// ── Export Excel ──────────────────────────────────────────────────────────
+function exportExcel(btn) {
+  const url = btn.dataset.url;
+  if (!url) return;
+  window.location.href = url;
+}

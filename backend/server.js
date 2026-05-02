@@ -98,6 +98,7 @@ app.use('/api/quotes',    require('./routes/quotes'));
 app.use('/api/schedule',      require('./routes/schedule'));
 app.use('/api/spool-weights', require('./routes/spool-weights'));
 app.use('/api/updater',      require('./routes/updater'));
+app.use('/api/excel',        require('./routes/excel-export'));
 // Rapport hebdomadaire
 app.use('/api/report', require('./routes/report'));
 

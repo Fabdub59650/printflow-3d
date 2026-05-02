@@ -1,6 +1,6 @@
 async function renderStats() {
   document.getElementById('page-title').textContent = 'Statistiques';
-  document.getElementById('topbar-actions').innerHTML = `
+  document.getElementById('topbar-actions').innerHTML = '<button class="btn" onclick="exportExcel(this)" data-url="/api/excel/rentabilite">&#8595; Excel rentabilité</button> ' + `
     <div style="display:flex;gap:4px;align-items:center;overflow-x:auto;flex-wrap:nowrap">
       <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;flex-shrink:0">
         <button class="filter-btn active" data-view="global"      onclick="switchStatsView('global',this)">Global</button>

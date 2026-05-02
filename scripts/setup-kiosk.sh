@@ -85,6 +85,11 @@ exec chromium \
   --use-gl=egl \
   --cursor-invisible \
   --disk-cache-size=0 \
+  --disable-background-timer-throttling \
+  --disable-backgrounding-occluded-windows \
+  --disable-renderer-backgrounding \
+  --disable-background-networking \
+  --disable-hang-monitor \
   --window-size=1024,600 \
   --window-position=0,0 \
   --disable-pinch \
@@ -123,6 +128,11 @@ exec chromium \
   --use-gl=egl \
   --cursor-invisible \
   --disk-cache-size=0 \
+  --disable-background-timer-throttling \
+  --disable-backgrounding-occluded-windows \
+  --disable-renderer-backgrounding \
+  --disable-background-networking \
+  --disable-hang-monitor \
   --window-size=1024,600 \
   --window-position=0,0 \
   --disable-pinch \

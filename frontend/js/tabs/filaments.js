@@ -195,6 +195,7 @@ async function renderFilaments() {
   document.getElementById('page-title').textContent = 'Filaments';
   const activeAdv = countActiveFilAdvanced();
   document.getElementById('topbar-actions').innerHTML =
+    '<button class="btn" onclick="exportExcel(this)" data-url="/api/excel/filaments">&#8595; Excel</button> ' +
     `${window._spoolmanEnabled ? '<button class="btn btn-sm" onclick="syncSpoolman()" style="margin-right:4px">↻ Sync Spoolman</button>' : ''}
      <button class="btn btn-sm" onclick="openWeighingModal()" style="margin-right:4px">⚖ Pesée</button>
      <div style="position:relative;display:inline-block;margin-right:4px">

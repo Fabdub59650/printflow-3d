@@ -7,8 +7,8 @@
   --text: #1a1917;
   --text2: #6b6a65;
   --text3: #9c9a93;
-  --accent: #185FA5;
-  --accent-bg: #E6F1FB;
+  --accent: #185FA5;     /* Couleur principale — modifiable via Paramètres */
+  --accent-bg: #E6F1FB;  /* Fond accent — calculé automatiquement */
   --success: #639922; --success-bg: #EAF3DE;
   --warning: #BA7517; --warning-bg: #FAEEDA;
   --danger: #A32D2D; --danger-bg: #FCEBEB;
