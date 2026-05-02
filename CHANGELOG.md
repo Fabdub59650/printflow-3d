@@ -261,3 +261,29 @@
 - Chemin photos impressions lu depuis settings (prints_photo_path) dans la sauvegarde
 - Mot de passe NAS chiffré AES-256-GCM
 - Métadonnées sauvegardes stockées en BDD (visible même si NAS non monté)
+
+---
+
+## [2.9.0] — 2026-05-02
+
+### Ajouté
+- **Export/Import bibliothèque** — exporter un objet complet (fichiers 3D + photo + document joint + métadonnées) en ZIP
+  - Bouton "↓ Exporter" dans la fiche objet
+  - Bouton "📦 Importer ZIP" dans la barre bibliothèque
+  - Format avec manifest.json, reconstruction complète à l'import
+- **Traçabilité devis** — création, modification, changement de statut, suppression enregistrés dans l'historique
+- **Traçabilité paramètres** — modifications importantes loguées (SMTP, auth, sauvegarde, modules, thème...)
+- **Santé système** — widget dans Paramètres → Système
+  - Température CPU avec alerte > 75°C
+  - Mémoire RAM et espace disque avec barres de progression colorées
+  - Uptime, charge CPU, IP réseau, statut service PrintFlow
+- **Mise à jour automatique** — widget dans Paramètres → Système
+  - Vérification de la dernière version sur GitHub
+  - Installation en un clic avec confirmation
+  - Redémarrage automatique du service après mise à jour
+- **Raccourci clavier** — touche `w` pour l'onglet Bobines réf.
+
+### Corrigé
+- Onglet Système vide — `process.version` non disponible dans le navigateur
+- Version affichée 0.0.0 dans l'updater — lecture depuis package.json en fallback
+- Bibliothèque stats : `file_count` → `total_files` (undefined affiché)
