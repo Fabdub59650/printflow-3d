@@ -1,0 +1,31 @@
+# Certificats et clés SSL
+*.crt
+*.pem
+*.key
+*.p12
+
+# Sauvegardes
+backups/
+backup/
+
+# Photos et uploads
+prints/
+frontend/uploads/
+
+# Bibliothèque (fichiers STL/3MF volumineux)
+library/
+
+# Node
+node_modules/
+backend/node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environnement
+.env
+.env.local
+
+# Clé de chiffrement
+backend/.key
