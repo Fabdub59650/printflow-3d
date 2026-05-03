@@ -310,3 +310,41 @@
   - Date estimée d'épuisement et semaines restantes
   - Alertes visuelles : critique (< 10%), faible (< 20%), à surveiller (< 4 semaines)
   - Filaments non utilisés sur la période identifiés
+
+---
+
+## [2.9.3] — 2026-05-03
+
+### Ajouté
+- **Telegram — Photo avec impression terminée** — si une photo est associée à l'impression, elle est envoyée directement via Telegram avec la légende
+- **Telegram — Coût réel** dans la notification impression terminée
+- **Telegram — Résumé quotidien** — message automatique à 20h avec : impressions du jour, heures de chauffe, filament consommé, coût réel, alertes stock faible
+- **Telegram — Maintenance préventive** — alerte 24h avant l'échéance d'une maintenance planifiée
+- **Telegram — Toggle résumé quotidien** dans les paramètres
+
+---
+
+## [2.9.3] — 2026-05-03
+
+### Ajouté
+- **Telegram — Photo avec impression terminée** — envoi de la photo via Telegram avec la légende enrichie
+- **Telegram — Coût réel** dans la notification impression terminée
+- **Telegram — Résumé quotidien à 20h** — bilan impressions, heures, filament, coût, alertes stock
+- **Telegram — Maintenance préventive** — alerte 24h avant l'échéance
+- **Telegram — Toggle résumé quotidien** dans les paramètres
+- **Stats — Comparaison imprimantes enrichie** — graphique radar + tableau comparatif complet + champions par métrique
+- **Stats — Groupes de navigation** — onglets regroupés par thème (Activité, Filaments, Finances, Qualité)
+- **Kiosque — Widget prédiction stock** — bobines à commander visible sur l'écran tactile
+- **Kiosque — Anti-gel amélioré** — rechargement automatique de la page si gel détecté (comparaison horloge JS vs réelle)
+- **Rapport mensuel enrichi** — coût réel, détail matière/électricité, taux réussite 12 mois, filaments à surveiller
+- **Galerie — Filtres supplémentaires** — tri par coût réel et durée, filtre par statut
+- **Galerie — Vignettes enrichies** — durée et coût réel affichés sur chaque photo
+- **Fiche impression — Détail coût** — formule de calcul visible (g × €/kg, min × €/min, €/h)
+- **Paramètres — Tarif électricité** — champ dédié dans Données (utilisé pour coûts réels et devis)
+- **Dashboard — Mini graphique 7 jours** — barres d'activité avec réussite/échec, résumé heures/grammes/coût
+
+### Corrigé
+- Test Telegram : fonctionnait pas si token masqué → utilise la config stockée en base
+- Kiosque : layout reorganisé (Planning L2, Aujourd'hui L3, Alertes C3 L2-3, Stock C4 L2-3)
+- Kiosque : 502 au démarrage → sleep 15 dans .xinitrc
+- Sélecteur période prédiction stock : ne s'appliquait pas → passage de la valeur en paramètre

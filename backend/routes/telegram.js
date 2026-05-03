@@ -51,8 +51,14 @@ router.post('/config', async (req, res) => {
 // POST /api/telegram/test — envoyer un message de test
 router.post('/test', async (req, res) => {
   try {
-    const { token, chat_id } = req.body;
-    if (!token || token.includes('•') || !chat_id)
+    let { token, chat_id } = req.body;
+    // Si token masqué ou absent, utiliser la config stockée
+    if (!token || token.includes('•')) {
+      const cfg = await telegram.getTelegramConfig();
+      token   = cfg.token;
+      chat_id = chat_id || cfg.chat_id;
+    }
+    if (!token || !chat_id)
       return res.status(400).json({ error: 'Token et Chat ID requis' });
     const result = await telegram.testConnection(token, chat_id);
     res.json(result);

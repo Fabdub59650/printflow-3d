@@ -160,7 +160,7 @@
       height:calc(600px - 44px - 64px);
       display:grid;
       grid-template-columns:1fr 1fr 1fr 240px;
-      grid-template-rows:1fr 1fr;
+      grid-template-rows:1fr 1fr 1fr;
       gap:8px;
       padding:8px;
     }
@@ -269,8 +269,8 @@
 
     /* ── Alertes ── */
     #alerts-card {
-      grid-row:1 / 3;
-      grid-column:4;
+      grid-row:2 / 4;
+      grid-column:3;
       display:flex;
       flex-direction:column;
     }
@@ -290,8 +290,13 @@
     }
 
     /* ── Planning ── */
+    #stock-predict-card {
+      grid-row:2 / 4;
+      grid-column:4;
+    }
     #planning-card {
       grid-column:1 / 3;
+      grid-row:2;
       display:flex;
       flex-direction:column;
     }
@@ -314,7 +319,8 @@
 
     /* ── Stats jour ── */
     #stats-card {
-      grid-column:3;
+      grid-column:1 / 3;
+      grid-row:3;
       display:flex;
       flex-direction:column;
       gap:8px;
@@ -497,6 +503,14 @@
   <div class="card" id="alerts-card">
     <div class="card-title">! Alertes</div>
     <div id="alerts-list" style="flex:1;overflow-y:auto">
+      <div style="color:var(--text3);font-size:12px">Chargement…</div>
+    </div>
+  </div>
+
+  <!-- Prédiction stock -->
+  <div class="card" id="stock-predict-card">
+    <div class="card-title">📦 Stock à commander</div>
+    <div id="stock-predict-list" style="flex:1;overflow-y:auto">
       <div style="color:var(--text3);font-size:12px">Chargement…</div>
     </div>
   </div>
@@ -736,6 +750,44 @@ function renderPrinter(idx, printer, mr) {
 }
 
 // ── Alertes ───────────────────────────────────────────────────────────────
+async function renderStockPredict() {
+  const list = document.getElementById('stock-predict-list');
+  if (!list) return;
+  try {
+    const data = await apiGet('/stats/stock-prediction?days=30');
+    const preds = (data.predictions || []).filter(function(p) {
+      return p.status === 'critical' || p.status === 'low' || p.status === 'warning';
+    }).slice(0, 5);
+
+    if (!preds.length) {
+      list.innerHTML = '<div style="color:var(--success);font-size:12px">✓ Stocks OK</div>';
+      return;
+    }
+
+    const icon  = { critical: '🔴', low: '🟠', warning: '🟡' };
+    const color = { critical: 'var(--danger)', low: 'var(--warning)', warning: 'var(--text2)' };
+
+    list.innerHTML = preds.map(function(p) {
+      const weeks = p.weeks_left !== null
+        ? (p.weeks_left < 1 ? '< 1 sem.' : Math.round(p.weeks_left) + ' sem.')
+        : '—';
+      const rate = p.weekly_rate_g > 0 ? p.weekly_rate_g + 'g/sem' : 'non utilisé';
+      return '<div class="alert-item">' +
+        '<span style="font-size:13px;flex-shrink:0">' + (icon[p.status]||'⚠') + '</span>' +
+        '<div style="overflow:hidden">' +
+          '<div style="font-size:12px;color:' + (color[p.status]||'var(--text)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">' +
+            p.name + ' — ' + Math.round(p.weight_remaining) + 'g (' + p.stock_pct + '%)' +
+          '</div>' +
+          '<div style="font-size:11px;color:var(--text3)">' + rate + ' · ' + weeks + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch(_) {
+    const list2 = document.getElementById('stock-predict-list');
+    if (list2) list2.innerHTML = '';
+  }
+}
+
 function renderAlerts(stockAlerts, bobineAlerts, maintAlerts) {
   const list = document.getElementById('alerts-list');
   const items = [];
@@ -861,6 +913,7 @@ async function kioskRefresh(manual) {
     if (card2) card2.style.display = printers.length < 3 ? 'none' : '';
 
     renderAlerts(stockAlerts, bobineAlerts, maintAlerts);
+    renderStockPredict();
     renderPlanning(prints);
     renderStats(prints);
 
@@ -1507,50 +1560,58 @@ initNfcSse();
 kioskRefresh(false);
 _refreshTimer = setInterval(kioskRefresh, REFRESH_MS);
 
-// ── Anti-gel : Page Visibility API ───────────────────────────────────────
-// Forcer un refresh immédiat quand l'écran se rallume ou la page redevient visible
-document.addEventListener('visibilitychange', function() {
-  if (!document.hidden) {
-    console.log('[Kiosk] Page redevenue visible — refresh forcé');
-    kioskRefresh(false);
+// ── Anti-gel : détection par comparaison horloge JS vs horloge réelle ────
+// Chromium gèle les setInterval mais pas l'horloge système.
+// On compare le temps écoulé réel au temps écoulé JS pour détecter un gel.
+
+let _lastTickReal = Date.now();
+let _lastTickJS   = Date.now();
+let _gelCount = 0;
+
+// Ce setInterval se déclenche toutes les 5s en conditions normales
+const _gelDetector = setInterval(function() {
+  const now       = Date.now();
+  const elapsed   = now - _lastTickReal;
+  _lastTickReal   = now;
+
+  // Si plus de 45s se sont écoulées depuis le dernier tick (normal = ~5s)
+  // c'est que Chromium a gelé les timers
+  if (elapsed > 45000) {
+    _gelCount++;
+    console.warn('[Kiosk] Gel détecté ! Écoulé : ' + Math.round(elapsed/1000) + 's — rechargement');
+    window.location.reload();
+    return;
   }
-});
 
-// ── Watchdog : vérifier que le setInterval tourne encore ─────────────────
-// Si l'horloge JS est gelée depuis > 30s, relancer le timer
-let _lastClockTick = Date.now();
-const _origUpdateClock = updateClock;
-// Wrapper updateClock pour tracer le dernier tick
-window.addEventListener('focus', function() {
-  console.log('[Kiosk] Focus récupéré — refresh forcé');
-  kioskRefresh(false);
-});
-
-// Watchdog externe : toutes les 15s, vérifier que le dernier refresh
-// date de moins de 2× REFRESH_MS, sinon relancer
-setInterval(function() {
-  _lastClockTick = Date.now();
+  // Mise à jour de l'heure d'actualisation visible
+  const el = document.getElementById('last-update-time');
+  if (el) {
+    el.textContent = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  }
 }, 5000);
 
-// Relance du timer principal si inactif trop longtemps
-let _lastRefreshTime = Date.now();
-const _origKioskRefresh = kioskRefresh;
-// Patch kioskRefresh pour tracer le dernier appel
-async function kioskRefreshTracked(manual) {
-  _lastRefreshTime = Date.now();
-  return _origKioskRefresh(manual);
-}
-
-setInterval(function() {
-  const elapsed = Date.now() - _lastRefreshTime;
-  if (elapsed > REFRESH_MS * 3) {
-    console.warn('[Kiosk] Watchdog : refresh inactif depuis ' + Math.round(elapsed/1000) + 's — relance');
-    clearInterval(_refreshTimer);
-    _refreshTimer = setInterval(kioskRefresh, REFRESH_MS);
-    kioskRefresh(false);
-    _lastRefreshTime = Date.now();
+// Rechargement forcé au retour de veille via visibilitychange
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden) {
+    const elapsed = Date.now() - _lastTickReal;
+    console.log('[Kiosk] Visible — écoulé depuis dernier tick : ' + Math.round(elapsed/1000) + 's');
+    if (elapsed > 30000) {
+      console.warn('[Kiosk] Trop longtemps inactif — rechargement');
+      window.location.reload();
+    } else {
+      kioskRefresh(false);
+    }
   }
-}, 15000);
+});
+
+window.addEventListener('focus', function() {
+  const elapsed = Date.now() - _lastTickReal;
+  if (elapsed > 30000) {
+    window.location.reload();
+  } else {
+    kioskRefresh(false);
+  }
+});
 </script>
 </body>
 </html>

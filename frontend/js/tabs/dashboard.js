@@ -18,7 +18,7 @@ async function renderDashboard() {
   }
   const W = window._dashWidgets;
 
-  const [stats, prints, printers, projects, alerts, consumption, maintAlerts, consumableAlerts, bobineAlerts] = await Promise.all([
+  const [stats, prints, printers, projects, alerts, consumption, maintAlerts, consumableAlerts, bobineAlerts, week7] = await Promise.all([
     API.get('/stats'),
     W.has('prints_recent') ? API.get('/prints?limit=8') : Promise.resolve([]),
     API.get('/printers'),
@@ -28,6 +28,7 @@ async function renderDashboard() {
     (window._maintenanceAlertEnabled === true && W.has('alert_maintenance')) ? API.get('/stats/maintenance-alerts').catch(()=>[]) : Promise.resolve([]),
     W.has('alert_consumables') ? API.get('/consumables/alerts').catch(()=>[]) : Promise.resolve([]),
     W.has('alert_bobines') ? API.get('/alerts/bobines').catch(()=>[]) : Promise.resolve([]),
+    API.get('/stats/week7').catch(()=>null),
   ]);
 
   const s = stats.totals;
@@ -167,6 +168,7 @@ async function renderDashboard() {
   } catch(_) {}
 
   content.innerHTML = alertHtml + maintAlertHtml + consumableHtml + bobineHtml +
+    (week7 ? renderWeek7(week7) : '') +
     (W.has('metrics') ? `
     <div class="metrics-grid">
       <div class="metric-card">
@@ -538,4 +540,55 @@ async function saveDashWidgets() {
     toast('Tableau de bord mis à jour', 'success');
     renderDashboard();
   } catch(e) { toast('Erreur : ' + e.message, 'error'); }
+}
+
+// ── Mini graphique 7 derniers jours ──────────────────────────────────────
+function renderWeek7(data) {
+  if (!data || !data.days) return '';
+  const days   = data.days;
+  const totals = data.totals;
+  const maxVal = Math.max(...days.map(function(d){ return d.total; }), 1);
+  const today  = new Date().toISOString().slice(0, 10);
+
+  const bars = days.map(function(d) {
+    const hPct    = Math.round(d.total / maxVal * 100);
+    const isToday = d.date === today;
+    const barCol  = d.failed > 0
+      ? 'linear-gradient(to top, #ef4444 ' + Math.round(d.failed/Math.max(d.total,1)*100) + '%, #10b981 0%)'
+      : '#10b981';
+
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">' +
+      // Valeur au dessus
+      (d.total > 0 ? '<div style="font-size:10px;font-weight:600;color:var(--text2)">' + d.total + '</div>' : '<div style="font-size:10px;color:transparent">0</div>') +
+      // Barre
+      '<div style="width:100%;height:60px;background:var(--border);border-radius:4px;overflow:hidden;position:relative;display:flex;align-items:flex-end">' +
+        '<div style="width:100%;height:' + hPct + '%;background:' + barCol + ';border-radius:4px;transition:height 0.3s;min-height:' + (d.total>0?'4':'0') + 'px"></div>' +
+      '</div>' +
+      // Label jour
+      '<div style="font-size:10px;color:' + (isToday ? 'var(--accent)' : 'var(--text3)') + ';font-weight:' + (isToday?'700':'400') + ';text-align:center;white-space:nowrap">' +
+        d.label +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  const rate = totals.total > 0 ? Math.round(totals.success / totals.total * 100) : 0;
+  const rateColor = rate >= 90 ? '#10b981' : rate >= 70 ? '#f59e0b' : '#ef4444';
+
+  return '<div class="card" style="margin-bottom:16px">' +
+    '<div class="card-header">' +
+      '<span class="card-title">📅 Activité — 7 derniers jours</span>' +
+      '<span style="font-size:12px;color:var(--text3)">' + totals.total + ' impression' + (totals.total>1?'s':'') + '</span>' +
+    '</div>' +
+    '<div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:12px">' +
+      bars +
+    '</div>' +
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)">' +
+      '<span style="font-size:12px;color:var(--text3)">✅ ' + totals.success + ' réussies</span>' +
+      (totals.failed > 0 ? '<span style="font-size:12px;color:#ef4444">❌ ' + totals.failed + ' échouées</span>' : '') +
+      '<span style="font-size:12px;font-weight:600;color:' + rateColor + '">' + rate + '% réussite</span>' +
+      (totals.hours > 0 ? '<span style="font-size:12px;color:var(--text3)">⏱ ' + totals.hours + 'h</span>' : '') +
+      (totals.grams > 0 ? '<span style="font-size:12px;color:var(--text3)">🧵 ' + totals.grams + 'g</span>' : '') +
+      (totals.cost > 0 ? '<span style="font-size:12px;color:#10b981;font-weight:500">💰 ' + totals.cost.toFixed(2) + '€</span>' : '') +
+    '</div>' +
+  '</div>';
 }

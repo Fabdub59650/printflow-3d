@@ -879,4 +879,56 @@ router.get('/success-rate-history', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/stats/week7 — activité des 7 derniers jours
+router.get('/week7', async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        DATE(created_at) AS day,
+        COUNT(*) AS total,
+        SUM(status='done') AS success,
+        SUM(status='failed') AS failed,
+        ROUND(SUM(COALESCE(actual_duration,0))/60,1) AS hours,
+        ROUND(SUM(COALESCE(filament_used,0)),0) AS grams,
+        ROUND(SUM(COALESCE(real_cost,0)),2) AS cost
+      FROM prints
+      WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        AND status IN ('done','failed','cancelled')
+      GROUP BY DATE(created_at)
+      ORDER BY day ASC
+    `);
+
+    // Construire un tableau des 7 derniers jours (avec jours vides)
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const row = rows.find(function(r) { return String(r.day).slice(0,10) === key; });
+      days.push({
+        date:    key,
+        label:   d.toLocaleDateString('fr-FR', { weekday:'short', day:'numeric' }),
+        total:   parseInt(row?.total  || 0),
+        success: parseInt(row?.success || 0),
+        failed:  parseInt(row?.failed  || 0),
+        hours:   parseFloat(row?.hours  || 0),
+        grams:   parseInt(row?.grams   || 0),
+        cost:    parseFloat(row?.cost   || 0),
+      });
+    }
+
+    const totals = {
+      total:   days.reduce(function(s,d){ return s+d.total; }, 0),
+      success: days.reduce(function(s,d){ return s+d.success; }, 0),
+      failed:  days.reduce(function(s,d){ return s+d.failed; }, 0),
+      hours:   Math.round(days.reduce(function(s,d){ return s+d.hours; }, 0) * 10) / 10,
+      grams:   days.reduce(function(s,d){ return s+d.grams; }, 0),
+      cost:    Math.round(days.reduce(function(s,d){ return s+d.cost; }, 0) * 100) / 100,
+    };
+
+    res.json({ days, totals });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+
 module.exports = router;

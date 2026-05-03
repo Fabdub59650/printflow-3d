@@ -149,6 +149,23 @@ router.get('/:id', async (req, res) => {
        WHERE pf.print_id=? ORDER BY pf.sort_order`, [print.id]
     );
     print.filaments = pf;
+
+    // Ajouter tarif électricité et prix/kg pour affichage du détail coût
+    const [[elecRow]] = await db.query(
+      "SELECT value FROM settings WHERE key_name='quote_electricity_rate'"
+    ).catch(function(){ return [[null]]; });
+    print.electricity_rate = elecRow?.value ? parseFloat(elecRow.value) / 60 : null; // €/min
+
+    // Prix/kg du filament principal
+    if (print.filament_id) {
+      const [[filRow]] = await db.query(
+        'SELECT price, weight_total FROM filaments WHERE id=?', [print.filament_id]
+      ).catch(function(){ return [[null]]; });
+      print.price_per_kg = filRow?.price && filRow?.weight_total
+        ? parseFloat(filRow.price) / (parseFloat(filRow.weight_total) / 1000)
+        : null;
+    }
+
     res.json(print);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

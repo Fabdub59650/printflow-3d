@@ -119,6 +119,10 @@ router.get('/monthly', async (req, res) => {
     const avgNote   = prints.filter(function(p) { return p.rating; }).length
       ? Math.round(prints.filter(function(p) { return p.rating; }).reduce(function(s,p) { return s+p.rating; }, 0) / prints.filter(function(p) { return p.rating; }).length * 10) / 10
       : null;
+    const realCost       = Math.round(prints.filter(function(p){ return p.real_cost; }).reduce(function(s,p){ return s+parseFloat(p.real_cost||0); },0)*100)/100;
+    const realCostMat    = Math.round(prints.reduce(function(s,p){ return s+parseFloat(p.real_filament_cost||0); },0)*100)/100;
+    const realCostElec   = Math.round(prints.reduce(function(s,p){ return s+parseFloat(p.real_electricity_cost||0); },0)*100)/100;
+    const avgCostPrint   = success > 0 ? Math.round(realCost / success * 100) / 100 : 0;
 
     // ── Par imprimante ─────────────────────────────────────────────────
     const byPrinter = {};
@@ -197,11 +201,38 @@ router.get('/monthly', async (req, res) => {
     // ── App name ──────────────────────────────────────────────────────
     const [[appNameRow]] = await db.query("SELECT value FROM settings WHERE key_name='app_name'").catch(function(){ return [[{value:'PrintFlow-3D'}]]; });
 
+    // Taux de réussite 12 derniers mois pour graphique
+    const [successHistory] = await db.query(`
+      SELECT DATE_FORMAT(created_at,'%Y-%m') AS month,
+             COUNT(*) AS total, SUM(status='done') AS success,
+             ROUND(SUM(status='done')/COUNT(*)*100,1) AS rate
+      FROM prints
+      WHERE status IN ('done','failed','cancelled')
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+      GROUP BY month ORDER BY month ASC
+    `).catch(function(){ return [[]]; });
+
+    // Prédiction stock (filaments critiques)
+    const [stockPred] = await db.query(`
+      SELECT f.id, f.name, f.brand, f.material, f.color_hex,
+             f.weight_remaining, f.weight_total,
+             ROUND(f.weight_remaining/NULLIF(f.weight_total,0)*100,0) AS stock_pct,
+             ROUND(SUM(p.filament_used)/30*7,1) AS weekly_rate_g
+      FROM filaments f
+      LEFT JOIN prints p ON p.filament_id=f.id
+        AND p.status='done' AND p.created_at >= DATE_SUB(NOW(),INTERVAL 30 DAY)
+      WHERE f.archived=0
+      GROUP BY f.id
+      HAVING stock_pct < 25 OR weekly_rate_g > 0
+      ORDER BY stock_pct ASC LIMIT 8
+    `).catch(function(){ return [[]]; });
+
     res.json({
       month, dateFrom, dateTo,
       appName: appNameRow?.value || 'PrintFlow-3D',
       stats: { total, success, failed, cancelled, hours, grams, avgNote,
-               rate: total > 0 ? Math.round(success/total*100) : 0 },
+               rate: total > 0 ? Math.round(success/total*100) : 0,
+               realCost, realCostMat, realCostElec, avgCostPrint },
       prevStats,
       printerStats,
       materialStats,
@@ -212,6 +243,8 @@ router.get('/monthly', async (req, res) => {
       quotes,
       quotesAccepted,
       caAccepted,
+      successHistory,
+      stockPred,
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

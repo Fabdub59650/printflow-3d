@@ -398,10 +398,22 @@ async function openPrintDetail(id) {
           (canCalc ? '<button class="btn btn-sm" onclick="recalcPrintCost(' + p.id + ')" id="btn-recalc-' + p.id + '">Recalculer</button>' : '') +
         '</div>' +
         (hasRealCost ? (
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">' +
             costBox('Matière',     rfc !== null ? rfc.toFixed(3) + ' €' : '—', '#3b82f6') +
             costBox('Électricité', rec !== null ? rec.toFixed(3) + ' €' : '—', '#8b5cf6') +
             costBox('Total réel',  rc  !== null ? rc.toFixed(2)  + ' €' : '—', '#10b981') +
+          '</div>' +
+          // Détail du calcul
+          '<div style="font-size:11px;color:var(--text3);border-top:1px solid var(--border);padding-top:8px;display:flex;flex-wrap:wrap;gap:8px">' +
+            (p.filament_used && p.price_per_kg
+              ? '<span>🧵 ' + Math.round(p.filament_used) + 'g × ' + parseFloat(p.price_per_kg).toFixed(2) + '€/kg</span>'
+              : (p.filament_used ? '<span>🧵 ' + Math.round(p.filament_used) + 'g consommés</span>' : '')) +
+            (p.actual_duration && p.electricity_rate
+              ? '<span>⚡ ' + p.actual_duration + 'min × ' + parseFloat(p.electricity_rate).toFixed(4) + '€/min</span>'
+              : (p.actual_duration ? '<span>⏱ ' + p.actual_duration + 'min</span>' : '')) +
+            (rc && p.actual_duration && p.actual_duration > 0
+              ? '<span>📊 ' + (rc / p.actual_duration * 60).toFixed(3) + '€/h</span>'
+              : '') +
           '</div>'
         ) : (
           canCalc

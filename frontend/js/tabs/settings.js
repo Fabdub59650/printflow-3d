@@ -290,6 +290,22 @@ async function renderSettings() {
 
     case 'donnees':
       el.innerHTML = `
+    <!-- ── Tarification ────────────────────────────── -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Tarification</span></div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Tarif électricité (€/kWh)</label>
+          <input id="set-electricity-rate" type="number" step="0.001" min="0"
+                 value="${settings.quote_electricity_rate||'0.20'}"
+                 placeholder="ex: 0.20">
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">
+            Utilisé pour calculer le coût réel des impressions et des devis.
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Bibliothèque ───────────────────────────── -->
     <div class="card">
       <div class="card-header"><span class="card-title">Bibliothèque de fichiers</span></div>
@@ -705,6 +721,7 @@ async function renderSettings() {
               ['telegram_notif_failed', settings.telegram_notif_failed, 'Impression échouée (Moonraker)'],
               ['telegram_notif_stock',  settings.telegram_notif_stock,  'Stock filament faible'],
               ['telegram_notif_maint',  settings.telegram_notif_maint,  'Maintenance à prévoir'],
+              ['telegram_notif_daily',  settings.telegram_notif_daily,  'Résumé quotidien (20h)'],
             ].map(function(item) {
               const key     = item[0];
               const val     = item[1];
@@ -1031,8 +1048,9 @@ async function saveSettings() {
   const togQuotes    = document.getElementById('toggle-quotes-enabled');
   const body = {
     app_name:       document.getElementById('set-app-name')?.value,
-    library_path:        document.getElementById('set-library-path')?.value,
-    prints_photo_path:   document.getElementById('set-prints-photo-path')?.value,
+    library_path:           document.getElementById('set-library-path')?.value,
+    prints_photo_path:      document.getElementById('set-prints-photo-path')?.value,
+    quote_electricity_rate: document.getElementById('set-electricity-rate')?.value,
     theme:          document.getElementById('set-theme')?.value || 'blue',
     color_mode:     document.getElementById('set-color-mode')?.value || '',
     dark_from:      document.getElementById('set-dark-from')?.value || '20',
@@ -1977,6 +1995,7 @@ async function saveTelegramSettings() {
     notif_failed: getNotif('telegram_notif_failed'),
     notif_stock:  getNotif('telegram_notif_stock'),
     notif_maint:  getNotif('telegram_notif_maint'),
+    notif_daily:  getNotif('telegram_notif_daily'),
   };
 
   try {
@@ -1986,19 +2005,13 @@ async function saveTelegramSettings() {
 }
 
 async function testTelegram() {
-  const token  = document.getElementById('set-tg-token')?.value;
-  const chatId = document.getElementById('set-tg-chatid')?.value;
   const result = document.getElementById('tg-test-result');
-
-  if (!token || token.includes('•') || !chatId) {
-    toast('Entrez le token et le Chat ID avant de tester', 'error');
-    return;
-  }
   if (result) result.textContent = 'Envoi en cours…';
   try {
-    const r = await API.post('/telegram/test', { token, chat_id: chatId });
+    // Envoyer sans token — le backend utilise la config stockée
+    const r = await API.post('/telegram/test', {});
     if (result) {
-      result.textContent = r.ok ? '✓ Message envoyé !' : '✗ ' + r.message;
+      result.textContent = r.ok ? '✓ Message envoyé !' : '✗ ' + (r.message || r.error || 'Erreur');
       result.style.color = r.ok ? 'var(--success)' : 'var(--danger)';
     }
   } catch(e) {

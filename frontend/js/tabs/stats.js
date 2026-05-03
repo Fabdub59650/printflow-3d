@@ -1165,6 +1165,12 @@ async function generateMonthlyReport(month) {
     <div class="metric-label">Filament consommé</div>
     <div class="metric-sub">${delta(s.grams, d.prevStats?.grams)}</div>
   </div>
+  ${s.realCost > 0 ? `<div class="metric">
+    <div class="metric-val" style="color:#16a34a">${parseFloat(s.realCost).toFixed(2)}€</div>
+    <div class="metric-label">Coût réel total</div>
+    <div class="metric-sub">Mat. ${parseFloat(s.realCostMat||0).toFixed(2)}€ · Élec. ${parseFloat(s.realCostElec||0).toFixed(2)}€</div>
+    <div class="metric-sub" style="margin-top:4px">Moy. ${parseFloat(s.avgCostPrint||0).toFixed(2)}€/impression</div>
+  </div>` : ''}
 </div>
 
 <div class="grid-2">
@@ -1321,7 +1327,7 @@ ${d.printerStats.length ? `
 <h2>📋 Liste des impressions</h2>
 ${d.prints.length ? `
 <table>
-  <thead><tr><th>Nom</th><th>Imprimante</th><th>Filament</th><th>Durée</th><th>Consommé</th><th>Note</th><th>Statut</th></tr></thead>
+  <thead><tr><th>Nom</th><th>Imprimante</th><th>Filament</th><th>Durée</th><th>Consommé</th><th>Coût réel</th><th>Note</th><th>Statut</th></tr></thead>
   <tbody>
     ${d.prints.map(function(p) {
       const statusMap = {done:'Réussie',failed:'Échouée',cancelled:'Annulée'};
@@ -1334,6 +1340,7 @@ ${d.prints.length ? `
         '<td>' + (p.filament_name ? '<span class="dot" style="background:' + (p.color_hex||'#ccc') + '"></span>' + p.filament_name : '—') + '</td>' +
         '<td style="color:#6b7280">' + dur + '</td>' +
         '<td style="color:#6b7280">' + (p.filament_used ? Math.round(p.filament_used)+'g' : '—') + '</td>' +
+        '<td style="color:#16a34a;font-weight:500">' + (p.real_cost ? parseFloat(p.real_cost).toFixed(2)+'€' : '—') + '</td>' +
         '<td style="color:#f59e0b;font-size:11px">' + stars + '</td>' +
         '<td><span class="badge ' + (cls[p.status]||'') + '">' + (statusMap[p.status]||p.status) + '</span></td>' +
       '</tr>';
@@ -1355,6 +1362,50 @@ ${d.gallery.length ? `
     '</div>';
   }).join('')}
 </div>
+</div>` : ''}
+
+<!-- PAGE 5 : TAUX DE RÉUSSITE 12 MOIS -->
+${d.successHistory && d.successHistory.length >= 3 ? `
+<div class="page-break">
+<h2>📈 Évolution du taux de réussite — 12 mois</h2>
+<table>
+  <thead><tr><th>Mois</th><th>Impressions</th><th>Réussies</th><th>Taux</th></tr></thead>
+  <tbody>
+    ${d.successHistory.slice().reverse().map(function(m) {
+      const rate = parseFloat(m.rate||0);
+      const col = rate>=90?'#16a34a':rate>=70?'#d97706':'#dc2626';
+      return '<tr>' +
+        '<td style="font-weight:500">' + m.month + '</td>' +
+        '<td style="text-align:center">' + m.total + '</td>' +
+        '<td style="text-align:center">' + m.success + '</td>' +
+        '<td style="text-align:center;font-weight:700;color:' + col + '">' + rate + '%</td>' +
+      '</tr>';
+    }).join('')}
+  </tbody>
+</table>
+</div>` : ''}
+
+<!-- PAGE 6 : PRÉDICTION STOCK -->
+${d.stockPred && d.stockPred.filter(function(p){ return parseFloat(p.stock_pct||100) < 25; }).length ? `
+<div class="page-break">
+<h2>📦 Filaments à surveiller</h2>
+<table>
+  <thead><tr><th>Filament</th><th>Matière</th><th>Stock (g)</th><th>Stock %</th><th>Conso./sem.</th></tr></thead>
+  <tbody>
+    ${d.stockPred.filter(function(p){ return parseFloat(p.stock_pct||100) < 25; }).map(function(p) {
+      const pct = parseFloat(p.stock_pct||0);
+      const col = pct<10?'#dc2626':pct<20?'#d97706':'#ca8a04';
+      const icon = pct<10?'🔴':pct<20?'🟠':'🟡';
+      return '<tr>' +
+        '<td><span class="dot" style="background:' + (p.color_hex||'#888') + '"></span>' + p.name + '</td>' +
+        '<td style="color:#6b7280">' + (p.material||'—') + '</td>' +
+        '<td style="text-align:right">' + Math.round(p.weight_remaining||0) + 'g</td>' +
+        '<td style="text-align:center;font-weight:700;color:' + col + '">' + icon + ' ' + pct + '%</td>' +
+        '<td style="text-align:right;color:#6b7280">' + (parseFloat(p.weekly_rate_g||0) > 0 ? parseFloat(p.weekly_rate_g).toFixed(0)+'g' : 'Non utilisé') + '</td>' +
+      '</tr>';
+    }).join('')}
+  </tbody>
+</table>
 </div>` : ''}
 
 <!-- PIED DE PAGE -->
@@ -1385,10 +1436,9 @@ async function renderStatsCompare() {
   try { data = await API.get('/stats/compare-printers?days=' + _compareDays); }
   catch(e) { content.innerHTML = '<div style="color:var(--danger)">' + e.message + '</div>'; return; }
 
-  const { printers, maxTotal, maxHours, maxGrams } = data;
-  const COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#ec4899','#06b6d4','#84cc16'];
+  const { printers } = data;
+  const COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#ec4899'];
 
-  // Toggle période
   const periodBtn = function(days, label) {
     return '<button onclick="_compareDays=' + days + ';renderStatsCompare()" ' +
       'style="padding:4px 14px;font-size:12px;border-radius:var(--radius);cursor:pointer;' +
@@ -1411,120 +1461,160 @@ async function renderStatsCompare() {
     return;
   }
 
-  // Trouver les "champions" par métrique
+  // Normaliser les métriques sur 100 pour le radar
+  const maxTotal  = Math.max(...printers.map(function(p){ return parseFloat(p.total||0); }), 1);
+  const maxHours  = Math.max(...printers.map(function(p){ return parseFloat(p.hours||0); }), 1);
+  const maxGrams  = Math.max(...printers.map(function(p){ return parseFloat(p.grams||0); }), 1);
+  const maxRating = Math.max(...printers.map(function(p){ return parseFloat(p.avg_rating||0); }), 1);
+
+  const normalize = function(val, max) { return max > 0 ? Math.round(parseFloat(val||0) / max * 100) : 0; };
+
+  // Trouver les champions
   const best = {
-    rate:   printers.filter(function(p) { return p.rate !== null; }).sort(function(a,b) { return b.rate - a.rate; })[0]?.id,
-    total:  printers.sort(function(a,b) { return b.total - a.total; })[0]?.id,
-    rating: printers.filter(function(p) { return p.avg_rating; }).sort(function(a,b) { return b.avg_rating - a.avg_rating; })[0]?.id,
+    rate:   printers.filter(function(p){ return p.rate !== null; }).sort(function(a,b){ return b.rate-a.rate; })[0]?.id,
+    total:  printers.sort(function(a,b){ return b.total-a.total; })[0]?.id,
+    hours:  printers.sort(function(a,b){ return b.hours-a.hours; })[0]?.id,
+    rating: printers.filter(function(p){ return p.avg_rating; }).sort(function(a,b){ return b.avg_rating-a.avg_rating; })[0]?.id,
   };
 
-  // ── Cartes par imprimante
-  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:24px">';
+  // Graphique radar + tableau
+  html +=
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">' +
 
-  printers.forEach(function(p, i) {
-    const col     = COLORS[i % COLORS.length];
-    const rateCol = p.rate === null ? 'var(--text3)' : p.rate >= 90 ? '#10b981' : p.rate >= 70 ? '#f59e0b' : '#ef4444';
-    const isBest  = p.id === best.rate || p.id === best.total;
-
-    html += '<div class="card" style="border-top:3px solid ' + col + (isBest ? ';box-shadow:0 2px 12px ' + col + '33' : '') + '">' +
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
-        '<span style="width:12px;height:12px;border-radius:50%;background:' + col + ';flex-shrink:0;display:inline-block"></span>' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + p.name + '</div>' +
-          (p.model ? '<div style="font-size:11px;color:var(--text3)">' + p.model + '</div>' : '') +
+      // Radar
+      '<div class="card">' +
+        '<div class="card-header"><span class="card-title">Vue radar</span></div>' +
+        '<canvas id="chart-compare-radar" height="220"></canvas>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;justify-content:center">' +
+          printers.map(function(p, i) {
+            return '<span style="font-size:11px;display:flex;align-items:center;gap:4px">' +
+              '<span style="width:10px;height:10px;border-radius:50%;background:' + COLORS[i%COLORS.length] + ';display:inline-block"></span>' +
+              p.name + '</span>';
+          }).join('') +
         '</div>' +
-        (isBest ? '<span style="font-size:10px;padding:2px 8px;background:' + col + '22;color:' + col + ';border-radius:10px;font-weight:600">⭐ Meilleure</span>' : '') +
       '</div>' +
 
-      // Métriques en grille 2×2
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
-
-        '<div style="background:var(--bg3);border-radius:var(--radius);padding:10px">' +
-          '<div style="font-size:20px;font-weight:700">' + (p.total || 0) + '</div>' +
-          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase">Impressions</div>' +
-          '<div style="height:4px;background:var(--border2);border-radius:2px;margin-top:6px">' +
-            '<div style="height:100%;width:' + (maxTotal > 0 ? Math.round(p.total/maxTotal*100) : 0) + '%;background:' + col + ';border-radius:2px"></div>' +
-          '</div>' +
+      // Métriques clés
+      '<div class="card">' +
+        '<div class="card-header"><span class="card-title">Champions</span></div>' +
+        '<div style="display:flex;flex-direction:column;gap:10px">' +
+          [
+            { label: '🏆 Plus d\'impressions', key: 'total', fmt: function(p){ return p.total + ' impressions'; } },
+            { label: '✅ Meilleur taux reussite', key: 'rate', fmt: function(p){ return p.rate + '%'; } },
+            { label: '⏱ Plus d\'heures', key: 'hours', fmt: function(p){ return p.hours + 'h'; } },
+            { label: '⭐ Meilleure note', key: 'rating', fmt: function(p){ return p.avg_rating + '/5'; } },
+          ].map(function(m) {
+            const winner = printers.find(function(p){ return p.id === best[m.key]; });
+            if (!winner) return '';
+            const idx = printers.indexOf(winner);
+            return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px;background:var(--bg3);border-radius:var(--radius)">' +
+              '<span style="font-size:12px;color:var(--text3)">' + m.label + '</span>' +
+              '<span style="font-size:13px;font-weight:600;color:' + COLORS[idx%COLORS.length] + '">' +
+                winner.name + ' — ' + m.fmt(winner) +
+              '</span>' +
+            '</div>';
+          }).join('') +
         '</div>' +
-
-        '<div style="background:var(--bg3);border-radius:var(--radius);padding:10px">' +
-          '<div style="font-size:20px;font-weight:700;color:' + rateCol + '">' + (p.rate !== null ? p.rate + '%' : '—') + '</div>' +
-          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase">Taux réussite</div>' +
-          '<div style="height:4px;background:var(--border2);border-radius:2px;margin-top:6px">' +
-            '<div style="height:100%;width:' + (p.rate||0) + '%;background:' + rateCol + ';border-radius:2px"></div>' +
-          '</div>' +
-        '</div>' +
-
-        '<div style="background:var(--bg3);border-radius:var(--radius);padding:10px">' +
-          '<div style="font-size:20px;font-weight:700">' + (p.hours || 0) + 'h</div>' +
-          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase">Heures</div>' +
-          '<div style="height:4px;background:var(--border2);border-radius:2px;margin-top:6px">' +
-            '<div style="height:100%;width:' + (maxHours > 0 ? Math.round((parseFloat(p.hours)||0)/maxHours*100) : 0) + '%;background:' + col + ';border-radius:2px"></div>' +
-          '</div>' +
-        '</div>' +
-
-        '<div style="background:var(--bg3);border-radius:var(--radius);padding:10px">' +
-          '<div style="font-size:20px;font-weight:700">' + (p.grams || 0) + 'g</div>' +
-          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase">Filament</div>' +
-          '<div style="height:4px;background:var(--border2);border-radius:2px;margin-top:6px">' +
-            '<div style="height:100%;width:' + (maxGrams > 0 ? Math.round((parseInt(p.grams)||0)/maxGrams*100) : 0) + '%;background:' + col + ';border-radius:2px"></div>' +
-          '</div>' +
-        '</div>' +
-
       '</div>' +
 
-      // Infos secondaires
-      '<div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--text3)">' +
-        (p.avg_duration_label !== '—' ? '<span>⏱ Moy. ' + p.avg_duration_label + '</span>' : '') +
-        (p.avg_rating ? '<span style="color:#f59e0b">★ ' + p.avg_rating + '/5</span>' : '') +
-        (p.success ? '<span style="color:#10b981">✓ ' + p.success + ' réussies</span>' : '') +
-        (p.failed  ? '<span style="color:#ef4444">✗ ' + p.failed + ' échouées</span>' : '') +
-        (p.last_print ? '<span>Dernière : ' + new Date(p.last_print).toLocaleDateString('fr-FR') + '</span>' : '<span>Aucune impression</span>') +
-      '</div>' +
+    '</div>' +
 
+    // Tableau comparatif
+    '<div class="card">' +
+      '<div class="card-header"><span class="card-title">Comparatif détaillé</span></div>' +
+      '<div style="overflow-x:auto">' +
+      '<table>' +
+        '<thead><tr>' +
+          '<th>Métrique</th>' +
+          printers.map(function(p, i) {
+            return '<th style="color:' + COLORS[i%COLORS.length] + '">' + p.name + '</th>';
+          }).join('') +
+        '</tr></thead>' +
+        '<tbody>' +
+          [
+            { label: 'Impressions totales', key: 'total', fmt: function(v){ return v || '0'; } },
+            { label: 'Réussies', key: 'success', fmt: function(v){ return v || '0'; } },
+            { label: 'Échouées', key: 'failed', fmt: function(v){ return v || '0'; } },
+            { label: 'Taux de réussite', key: 'rate', fmt: function(v){ return v !== null ? v + '%' : '—'; } },
+            { label: 'Heures totales', key: 'hours', fmt: function(v){ return v ? v + 'h' : '—'; } },
+            { label: 'Durée moyenne', key: 'avg_duration_label', fmt: function(v){ return v || '—'; } },
+            { label: 'Filament consommé', key: 'grams', fmt: function(v){ return v ? Math.round(v) + 'g' : '—'; } },
+            { label: 'Note moyenne', key: 'avg_rating', fmt: function(v){ return v ? v + '/5' : '—'; } },
+          ].map(function(row, ri) {
+            // Trouver le meilleur pour cette métrique
+            const bestVal = Math.max(...printers.map(function(p){ return parseFloat(p[row.key]||0); }));
+            return '<tr>' +
+              '<td style="font-size:12px;color:var(--text3);font-weight:500">' + row.label + '</td>' +
+              printers.map(function(p, i) {
+                const val = p[row.key];
+                const isBest = parseFloat(val||0) === bestVal && bestVal > 0;
+                return '<td style="text-align:center;font-weight:' + (isBest?'700':'400') + ';color:' + (isBest?COLORS[i%COLORS.length]:'var(--text)') + '">' +
+                  row.fmt(val) +
+                '</td>';
+              }).join('') +
+            '</tr>';
+          }).join('') +
+        '</tbody>' +
+      '</table>' +
+      '</div>' +
     '</div>';
-  });
-  html += '</div>';
-
-  // ── Tableau comparatif
-  html += '<div class="card"><div class="card-header"><span class="card-title">Tableau comparatif</span></div>' +
-    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
-    '<thead><tr style="background:var(--bg3)">' +
-      '<th style="padding:10px 12px;text-align:left;font-weight:500;color:var(--text3)">Imprimante</th>' +
-      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Total</th>' +
-      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:#10b981">Réussies</th>' +
-      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:#ef4444">Échouées</th>' +
-      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Taux</th>' +
-      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Heures</th>' +
-      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Filament</th>' +
-      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:#f59e0b">Note moy.</th>' +
-      '<th style="padding:10px 12px;text-align:right;font-weight:500;color:var(--text3)">Durée moy.</th>' +
-    '</tr></thead><tbody>' +
-    printers.map(function(p, i) {
-      const col     = COLORS[i % COLORS.length];
-      const rateCol = p.rate === null ? 'var(--text3)' : p.rate >= 90 ? '#10b981' : p.rate >= 70 ? '#f59e0b' : '#ef4444';
-      return '<tr style="border-top:0.5px solid var(--border)">' +
-        '<td style="padding:10px 12px">' +
-          '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + col + ';margin-right:8px"></span>' +
-          '<span style="font-weight:500">' + p.name + '</span>' +
-          (p.model ? '<span style="font-size:11px;color:var(--text3);margin-left:6px">' + p.model + '</span>' : '') +
-        '</td>' +
-        '<td style="padding:10px 12px;text-align:right;font-weight:600">' + (p.total||0) + '</td>' +
-        '<td style="padding:10px 12px;text-align:right;color:#10b981">' + (p.success||0) + '</td>' +
-        '<td style="padding:10px 12px;text-align:right;color:' + (p.failed > 0 ? '#ef4444' : 'var(--text3)') + '">' + (p.failed||'—') + '</td>' +
-        '<td style="padding:10px 12px;text-align:right;font-weight:600;color:' + rateCol + '">' + (p.rate !== null ? p.rate+'%' : '—') + '</td>' +
-        '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + (p.hours||0) + 'h</td>' +
-        '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + (p.grams||0) + 'g</td>' +
-        '<td style="padding:10px 12px;text-align:right;color:#f59e0b">' + (p.avg_rating ? '★ '+p.avg_rating : '—') + '</td>' +
-        '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + (p.avg_duration_label||'—') + '</td>' +
-      '</tr>';
-    }).join('') +
-    '</tbody></table></div></div>';
 
   content.innerHTML = html;
+
+  // Dessiner le radar Chart.js
+  if (typeof Chart !== 'undefined') {
+    const ctx = document.getElementById('chart-compare-radar');
+    if (ctx) {
+      new Chart(ctx.getContext('2d'), {
+        type: 'radar',
+        data: {
+          labels: ['Impressions', 'Taux réussite', 'Heures', 'Filament', 'Note'],
+          datasets: printers.map(function(p, i) {
+            const color = COLORS[i % COLORS.length];
+            return {
+              label: p.name,
+              data: [
+                normalize(p.total,      maxTotal),
+                p.rate !== null ? p.rate : 0,
+                normalize(p.hours,      maxHours),
+                normalize(p.grams,      maxGrams),
+                normalize(p.avg_rating, maxRating),
+              ],
+              borderColor:     color,
+              backgroundColor: color + '22',
+              borderWidth: 2,
+              pointRadius: 3,
+              pointBackgroundColor: color,
+            };
+          }),
+        },
+        options: {
+          responsive: true,
+          scales: {
+            r: {
+              min: 0, max: 100,
+              ticks: { display: false },
+              pointLabels: { font: { size: 11 } },
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  return ctx.dataset.label + ' : ' + ctx.parsed.r;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
 }
 
-// ── Stats rentabilité réelle ──────────────────────────────────────────────
+
 async function renderStatsProfitability(days) {
   const content = document.getElementById('content');
   content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
@@ -1861,12 +1951,14 @@ async function renderStatsSuccessRate() {
 }
 
 // ── Prédiction épuisement stock filaments ────────────────────────────────
-async function renderStatsStockPrediction() {
+async function renderStatsStockPrediction(days) {
   const content = document.getElementById('content');
   content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 
-  const existingDays = document.getElementById('stock-pred-days');
-  const days = existingDays ? existingDays.value : '30';
+  if (!days) {
+    const existingDays = document.getElementById('stock-pred-days');
+    days = existingDays ? existingDays.value : '30';
+  }
 
   try {
     const data = await API.get('/stats/stock-prediction?days=' + days);
@@ -1883,7 +1975,7 @@ async function renderStatsStockPrediction() {
 
     let html =
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">' +
-        '<select id="stock-pred-days" onchange="renderStatsStockPrediction()" style="font-size:12px">' +
+        '<select id="stock-pred-days" onchange="renderStatsStockPrediction(this.value)" style="font-size:12px">' +
           [['7','7 jours'],['14','14 jours'],['30','30 jours'],['60','60 jours'],['90','90 jours']].map(function(o){
             return '<option value="' + o[0] + '"' + (days===o[0]?' selected':'') + '>Période : ' + o[1] + '</option>';
           }).join('') +

@@ -3,7 +3,7 @@
 let _galleryPrints   = [];
 let _galleryFiltered = [];
 let _galleryIndex    = 0;
-let _gFilters = { rating: '', material: '', printer_id: '', period: '', sort: 'date_desc' };
+let _gFilters = { rating: '', material: '', printer_id: '', period: '', status: '', sort: 'date_desc' };
 
 async function renderGallery() {
   document.getElementById('page-title').textContent = 'Galerie';
@@ -73,6 +73,18 @@ async function renderGallery() {
         '<option value="date_desc">Date ↓</option>' +
         '<option value="date_asc">Date ↑</option>' +
         '<option value="rating_desc">Meilleure note</option>' +
+        '<option value="cost_desc">Coût réel ↓</option>' +
+        '<option value="cost_asc">Coût réel ↑</option>' +
+        '<option value="duration_desc">Durée ↓</option>' +
+        '<option value="duration_asc">Durée ↑</option>' +
+      '</select>' +
+
+      // Filtre statut
+      '<select id="gf-status" onchange="_gFilters.status=this.value;applyGalleryFilters()" style="font-size:12px">' +
+        '<option value="">Tous les statuts</option>' +
+        '<option value="done">✅ Réussies</option>' +
+        '<option value="failed">❌ Échouées</option>' +
+        '<option value="cancelled">⚪ Annulées</option>' +
       '</select>' +
 
       '<button class="btn btn-sm" onclick="resetGalleryFilters()" style="flex-shrink:0">Réinitialiser</button>' +
@@ -85,8 +97,8 @@ async function renderGallery() {
 }
 
 function resetGalleryFilters() {
-  _gFilters = { rating: '', material: '', printer_id: '', period: '', sort: 'date_desc' };
-  ['gf-rating','gf-material','gf-printer','gf-period'].forEach(function(id) {
+  _gFilters = { rating: '', material: '', printer_id: '', period: '', status: '', sort: 'date_desc' };
+  ['gf-rating','gf-material','gf-printer','gf-period','gf-status'].forEach(function(id) {
     var el = document.getElementById(id); if (el) el.value = '';
   });
   var s = document.getElementById('gf-sort'); if (s) s.value = 'date_desc';
@@ -99,6 +111,7 @@ function applyGalleryFilters() {
   if (_gFilters.rating)     list = list.filter(function(p) { return (p.rating||0) >= parseInt(_gFilters.rating); });
   if (_gFilters.material)   list = list.filter(function(p) { return p.material === _gFilters.material; });
   if (_gFilters.printer_id) list = list.filter(function(p) { return String(p.printer_id) === String(_gFilters.printer_id); });
+  if (_gFilters.status)     list = list.filter(function(p) { return p.status === _gFilters.status; });
   if (_gFilters.period) {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - parseInt(_gFilters.period));
@@ -106,9 +119,13 @@ function applyGalleryFilters() {
   }
 
   list.sort(function(a, b) {
-    if (_gFilters.sort === 'date_desc')   return new Date(b.created_at) - new Date(a.created_at);
-    if (_gFilters.sort === 'date_asc')    return new Date(a.created_at) - new Date(b.created_at);
-    if (_gFilters.sort === 'rating_desc') return (b.rating||0) - (a.rating||0);
+    if (_gFilters.sort === 'date_desc')     return new Date(b.created_at) - new Date(a.created_at);
+    if (_gFilters.sort === 'date_asc')      return new Date(a.created_at) - new Date(b.created_at);
+    if (_gFilters.sort === 'rating_desc')   return (b.rating||0) - (a.rating||0);
+    if (_gFilters.sort === 'cost_desc')     return (parseFloat(b.real_cost)||0) - (parseFloat(a.real_cost)||0);
+    if (_gFilters.sort === 'cost_asc')      return (parseFloat(a.real_cost)||0) - (parseFloat(b.real_cost)||0);
+    if (_gFilters.sort === 'duration_desc') return (parseInt(b.actual_duration)||0) - (parseInt(a.actual_duration)||0);
+    if (_gFilters.sort === 'duration_asc')  return (parseInt(a.actual_duration)||0) - (parseInt(b.actual_duration)||0);
     return 0;
   });
 
@@ -164,7 +181,13 @@ function renderGalleryGrid() {
             (p.material    ? '<span>' + p.material + '</span>' : '') +
             (p.printer_name ? '<span>· ' + p.printer_name + '</span>' : '') +
           '</div>' +
-          '<div style="font-size:11px;color:var(--text3);margin-top:3px">' + fmtDate(p.created_at) + '</div>' +
+          '<div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;justify-content:space-between">' +
+            '<span>' + fmtDate(p.created_at) + '</span>' +
+            '<span style="display:flex;gap:6px">' +
+              (p.actual_duration ? '<span>' + (Math.floor(p.actual_duration/60)>0?Math.floor(p.actual_duration/60)+'h':'') + (p.actual_duration%60>0?p.actual_duration%60+'min':'') + '</span>' : '') +
+              (p.real_cost ? '<span style="color:#10b981;font-weight:500">' + parseFloat(p.real_cost).toFixed(2) + '€</span>' : '') +
+            '</span>' +
+          '</div>' +
         '</div>' +
       '</div>';
   });
