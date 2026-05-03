@@ -23,7 +23,8 @@ const INSTALL_DIR            = '/opt/printflow';
 
 let _cronTimer = null;
 let _lastBackup = null;
-let _backupStatus = 'idle'; // 'idle' | 'running' | 'success' | 'error'
+let _backupStatus   = 'idle'; // 'idle' | 'running' | 'success' | 'error'
+let _backupStartedAt = null;
 let _lastError = null;
 
 // ── Lecture des settings ──────────────────────────────────
@@ -74,16 +75,37 @@ function mountNas(cfg, mountPoint) {
     try { execSync('umount -l "' + mountPoint + '" 2>/dev/null'); } catch(_) {}
     fs.mkdirSync(mountPoint, { recursive: true });
     const share = '//' + cfg.nasIp + '/' + cfg.nasShare;
-    const opts  = ['iocharset=utf8','file_mode=0755','dir_mode=0755'];
+
+    const opts = ['iocharset=utf8','file_mode=0755','dir_mode=0755','vers=3.0'];
+
     if (cfg.nasUser) {
-      opts.push('username=' + cfg.nasUser);
-      if (cfg.nasPassword) opts.push('password=' + cfg.nasPassword);
-    } else { opts.push('guest'); }
-    const cmd = 'mount -t cifs "' + share + '" "' + mountPoint + '" -o ' + opts.join(',');
-    exec(cmd, function(err) {
-      if (err) reject(new Error('Erreur montage NAS : ' + err.message));
-      else resolve();
-    });
+      // Écrire fichier credentials — format strict attendu par mount.cifs
+      const credFile = '/tmp/pf_nas_' + Date.now();
+      const lines = ['username=' + cfg.nasUser];
+      if (cfg.nasPassword) lines.push('password=' + cfg.nasPassword);
+      fs.writeFileSync(credFile, lines.join('\n') + '\n', { mode: 0o600 });
+      opts.push('credentials=' + credFile);
+
+      const cmd = 'mount -t cifs "' + share + '" "' + mountPoint + '" -o ' + opts.join(',');
+      console.log('[Backup] Montage NAS :', share, '(credentials file)');
+      exec(cmd, { timeout: 30000 }, function(err) {
+        try { fs.unlinkSync(credFile); } catch(_) {}
+        if (err) {
+          console.error('[Backup] Erreur montage NAS :', err.message.split('\n')[0]);
+          reject(new Error('Erreur montage NAS : ' + err.message.split('\n')[0]));
+        } else {
+          console.log('[Backup] NAS monté avec succès');
+          resolve();
+        }
+      });
+    } else {
+      opts.push('guest');
+      const cmd = 'mount -t cifs "' + share + '" "' + mountPoint + '" -o ' + opts.join(',');
+      exec(cmd, { timeout: 30000 }, function(err) {
+        if (err) reject(new Error('Erreur montage NAS : ' + err.message.split('\n')[0]));
+        else resolve();
+      });
+    }
   });
 }
 
@@ -200,6 +222,8 @@ async function runBackup() {
   let backupRoot = null;
 
   _backupStatus = 'running';
+  _backupStartedAt = Date.now();
+  console.log('[Backup] Démarrage sauvegarde', new Date().toISOString());
 
   try {
     // ── Destination ──────────────────────────────────────
@@ -543,10 +567,27 @@ function setupRoutes(router) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  // POST /api/backup/reset — réinitialiser le verrou si bloqué
+  router.post('/reset', async (req, res) => {
+    console.log('[Backup] Reset manuel du verrou (était:', _backupStatus, ')');
+    _backupStatus    = 'idle';
+    _backupStartedAt = null;
+    res.json({ ok: true, message: 'Verrou réinitialisé' });
+  });
+
   // POST /api/backup/run — sauvegarde manuelle
   router.post('/run', async (req, res) => {
-    if (_backupStatus === 'running')
-      return res.status(409).json({ error: 'Sauvegarde déjà en cours' });
+    // Reset automatique si bloqué depuis > 30 minutes
+    if (_backupStatus === 'running') {
+      const elapsed = _backupStartedAt ? Date.now() - _backupStartedAt : Infinity;
+      if (elapsed > 30 * 60 * 1000) {
+        console.warn('[Backup] Verrou bloqué depuis ' + Math.round(elapsed/60000) + 'min — reset automatique');
+        _backupStatus = 'idle';
+        _backupStartedAt = null;
+      } else {
+        return res.status(409).json({ error: 'Sauvegarde déjà en cours' });
+      }
+    }
     try {
       const result = await runBackup();
       res.json({ ok: true, backup: result });

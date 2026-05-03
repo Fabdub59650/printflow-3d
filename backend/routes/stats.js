@@ -760,4 +760,123 @@ router.get('/weekly-highlights', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/stats/stock-prediction — prédiction épuisement stock filaments
+router.get('/stock-prediction', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+
+    // Consommation par filament sur la période
+    const [consumption] = await db.query(`
+      SELECT
+        f.id, f.name, f.brand, f.material, f.color_hex, f.color_name,
+        f.weight_remaining, f.weight_total, f.archived,
+        ROUND(SUM(p.filament_used), 0) AS consumed_g,
+        COUNT(p.id) AS print_count
+      FROM filaments f
+      LEFT JOIN prints p ON p.filament_id = f.id
+        AND p.status = 'done'
+        AND p.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+        AND p.filament_used IS NOT NULL
+      WHERE f.archived = 0
+      GROUP BY f.id
+      ORDER BY f.weight_remaining ASC
+    `, [days]);
+
+    const predictions = consumption.map(function(f) {
+      const remaining   = parseFloat(f.weight_remaining || 0);
+      const consumed    = parseFloat(f.consumed_g || 0);
+      const pct         = f.weight_total > 0 ? Math.round(remaining / f.weight_total * 100) : 0;
+      const weeklyRate  = consumed > 0 ? consumed / days * 7 : 0; // g/semaine
+      const weeksLeft   = weeklyRate > 0 ? remaining / weeklyRate : null;
+      
+      let status = 'ok';
+      if (pct < 10) status = 'critical';
+      else if (pct < 20) status = 'low';
+      else if (weeksLeft !== null && weeksLeft < 4) status = 'warning';
+
+      // Date estimée d'épuisement
+      let depletionDate = null;
+      if (weeklyRate > 0 && remaining > 0) {
+        const daysLeft = remaining / weeklyRate * 7;
+        const d = new Date();
+        d.setDate(d.getDate() + Math.round(daysLeft));
+        depletionDate = d.toISOString().slice(0, 10);
+      }
+
+      return {
+        id:            f.id,
+        name:          f.name,
+        brand:         f.brand,
+        material:      f.material,
+        color_hex:     f.color_hex,
+        color_name:    f.color_name,
+        weight_remaining: remaining,
+        weight_total:  parseFloat(f.weight_total || 0),
+        stock_pct:     pct,
+        consumed_g:    consumed,
+        print_count:   parseInt(f.print_count || 0),
+        weekly_rate_g: Math.round(weeklyRate * 10) / 10,
+        weeks_left:    weeksLeft !== null ? Math.round(weeksLeft * 10) / 10 : null,
+        depletion_date: depletionDate,
+        status,
+        period_days:   days,
+      };
+    });
+
+    res.json({ predictions, period_days: days });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/stats/success-rate-history — taux de réussite mensuel sur 12 mois
+router.get('/success-rate-history', async (req, res) => {
+  try {
+    const [monthly] = await db.query(`
+      SELECT
+        DATE_FORMAT(created_at, '%Y-%m') AS month,
+        COUNT(*) AS total,
+        SUM(status = 'done') AS success,
+        SUM(status = 'failed') AS failed,
+        ROUND(SUM(status = 'done') / COUNT(*) * 100, 1) AS rate,
+        ROUND(SUM(actual_duration) / 60, 1) AS hours,
+        ROUND(SUM(filament_used), 0) AS filament_g
+      FROM prints
+      WHERE status IN ('done', 'failed', 'cancelled')
+        AND created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+      GROUP BY month
+      ORDER BY month ASC
+    `);
+
+    // Par imprimante sur 12 mois
+    const [byPrinter] = await db.query(`
+      SELECT
+        pr.name AS printer_name,
+        DATE_FORMAT(p.created_at, '%Y-%m') AS month,
+        COUNT(*) AS total,
+        SUM(p.status = 'done') AS success,
+        ROUND(SUM(p.status = 'done') / COUNT(*) * 100, 1) AS rate
+      FROM prints p
+      JOIN printers pr ON pr.id = p.printer_id
+      WHERE p.status IN ('done', 'failed', 'cancelled')
+        AND p.created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+      GROUP BY pr.id, month
+      ORDER BY month ASC
+    `);
+
+    // Tendance globale (regression linéaire simple)
+    let trend = null;
+    if (monthly.length >= 3) {
+      const rates = monthly.map(function(m){ return parseFloat(m.rate || 0); });
+      const n = rates.length;
+      const sumX  = rates.reduce(function(_,__,i){ return _ + i; }, 0);
+      const sumY  = rates.reduce(function(s,r){ return s + r; }, 0);
+      const sumXY = rates.reduce(function(s,r,i){ return s + i*r; }, 0);
+      const sumX2 = rates.reduce(function(s,_,i){ return s + i*i; }, 0);
+      const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+      trend = slope > 0.5 ? 'up' : slope < -0.5 ? 'down' : 'stable';
+    }
+
+    res.json({ monthly, byPrinter, trend });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

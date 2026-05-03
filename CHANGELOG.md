@@ -295,3 +295,18 @@
 ### Corrigé
 - Export Excel : erreur de syntaxe JS sur les boutons (apostrophes dans window.open)
 - Export Excel : fonction exportExcel() ajoutée globalement dans app.js
+
+---
+
+## [2.9.2] — 2026-05-03
+
+### Ajouté
+- **Stats — Taux de réussite** — nouvel onglet avec graphique d'évolution sur 12 mois
+  - Courbe mensuelle avec points colorés (vert/orange/rouge)
+  - Ligne objectif 90%, tendance calculée (en hausse/baisse/stable)
+  - Tableau détail par mois avec heures et filament consommé
+- **Stats — Prédiction stock filaments** — nouvel onglet
+  - Consommation hebdomadaire par filament sur période configurable
+  - Date estimée d'épuisement et semaines restantes
+  - Alertes visuelles : critique (< 10%), faible (< 20%), à surveiller (< 4 semaines)
+  - Filaments non utilisés sur la période identifiés

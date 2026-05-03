@@ -1,21 +1,35 @@
 async function renderStats() {
   document.getElementById('page-title').textContent = 'Statistiques';
-  document.getElementById('topbar-actions').innerHTML = '<button class="btn" onclick="exportExcel(this)" data-url="/api/excel/rentabilite">&#8595; Excel rentabilité</button> ' + `
-    <div style="display:flex;gap:4px;align-items:center;overflow-x:auto;flex-wrap:nowrap">
-      <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;flex-shrink:0">
-        <button class="filter-btn active" data-view="global"      onclick="switchStatsView('global',this)">Global</button>
-        <button class="filter-btn"        data-view="activity"    onclick="switchStatsView('activity',this)">Activité</button>
-        <button class="filter-btn"        data-view="compare"     onclick="switchStatsView('compare',this)">Comparer</button>
-        <button class="filter-btn"        data-view="filaments"   onclick="switchStatsView('filaments',this)">Filaments</button>
-        <button class="filter-btn"        data-view="prints"      onclick="switchStatsView('prints',this)">Impressions</button>
-        <button class="filter-btn"        data-view="consumption" onclick="switchStatsView('consumption',this)">Consommation</button>
-        <button class="filter-btn"        data-view="history"     onclick="switchStatsView('history',this)">Historique</button>
-        <button class="filter-btn"        data-view="costs"       onclick="switchStatsView('costs',this)">Coûts</button>
-        <button class="filter-btn"        data-view="profitability" onclick="switchStatsView('profitability',this)">Rentabilité</button>
+  document.getElementById('topbar-actions').innerHTML = `
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="exportExcel(this)" data-url="/api/excel/rentabilite" style="flex-shrink:0">&#8595; Excel</button>
+      <button class="btn btn-sm" onclick="openMonthlyReportPicker()" style="flex-shrink:0;background:var(--accent-bg);color:var(--accent);border-color:var(--accent)" title="Rapport mensuel PDF">📄 PDF</button>
+      <div style="width:1px;height:20px;background:var(--border);flex-shrink:0"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+        <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase">Activité :</span>
+        <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+          <button class="filter-btn active" data-view="global"   onclick="switchStatsView('global',this)">Global</button>
+          <button class="filter-btn" data-view="activity"  onclick="switchStatsView('activity',this)">Activité</button>
+          <button class="filter-btn" data-view="compare"   onclick="switchStatsView('compare',this)">Comparer</button>
+          <button class="filter-btn" data-view="history"   onclick="switchStatsView('history',this)">Historique</button>
+        </div>
+        <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-left:4px">Filaments :</span>
+        <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+          <button class="filter-btn" data-view="filaments"    onclick="switchStatsView('filaments',this)">Filaments</button>
+          <button class="filter-btn" data-view="consumption"  onclick="switchStatsView('consumption',this)">Conso.</button>
+          <button class="filter-btn" data-view="stock-predict" onclick="switchStatsView('stock-predict',this)">Stock</button>
+        </div>
+        <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-left:4px">Finances :</span>
+        <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+          <button class="filter-btn" data-view="costs"         onclick="switchStatsView('costs',this)">Coûts</button>
+          <button class="filter-btn" data-view="profitability" onclick="switchStatsView('profitability',this)">Rentabilité</button>
+        </div>
+        <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-left:4px">Qualité :</span>
+        <div style="display:flex;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+          <button class="filter-btn" data-view="prints"        onclick="switchStatsView('prints',this)">Impressions</button>
+          <button class="filter-btn" data-view="success-rate"  onclick="switchStatsView('success-rate',this)">Taux</button>
+        </div>
       </div>
-      <button class="btn btn-sm" onclick="openMonthlyReportPicker()"
-        style="flex-shrink:0;background:var(--accent-bg);color:var(--accent);border-color:var(--accent)"
-        title="Rapport mensuel PDF">📄 PDF</button>
     </div>`;
   document.getElementById('content').innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 
@@ -44,6 +58,8 @@ function switchStatsView(view, btn) {
   if (view === 'history')     renderStatsHistory();
   if (view === 'costs')           renderStatsCosts();
   if (view === 'profitability')   renderStatsProfitability();
+  if (view === 'success-rate')   renderStatsSuccessRate();
+  if (view === 'stock-predict')  renderStatsStockPrediction();
 }
 
 async function renderStatsGlobal() {
@@ -1717,4 +1733,227 @@ function metricCard(label, value, color) {
     '<div class="metric-label">' + label + '</div>' +
     '<div class="metric-value" style="font-size:20px;color:' + color + '">' + value + '</div>' +
   '</div>';
+}
+
+// ── Taux de réussite dans le temps ───────────────────────────────────────
+async function renderStatsSuccessRate() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
+  try {
+    const data = await API.get('/stats/success-rate-history');
+    const monthly = data.monthly || [];
+
+    if (!monthly.length) {
+      content.innerHTML = '<div class="empty-state"><p>Pas encore assez de données.</p></div>';
+      return;
+    }
+
+    const trendLabel = { up: '📈 En amélioration', down: '📉 En baisse', stable: '➡ Stable' };
+    const trendColor = { up: '#10b981', down: '#ef4444', stable: '#f59e0b' };
+    const trend = data.trend || 'stable';
+    const avgRate = monthly.length
+      ? Math.round(monthly.reduce(function(s,m){ return s + parseFloat(m.rate||0); }, 0) / monthly.length * 10) / 10
+      : 0;
+    const lastRate = monthly.length ? parseFloat(monthly[monthly.length-1].rate) : 0;
+
+    let html =
+      // Métriques
+      '<div class="metrics-grid" style="margin-bottom:16px">' +
+        '<div class="metric-card"><div class="metric-label">Taux actuel</div>' +
+          '<div class="metric-value" style="color:' + (lastRate>=90?'#10b981':lastRate>=70?'#f59e0b':'#ef4444') + '">' + lastRate + '<span style="font-size:14px">%</span></div></div>' +
+        '<div class="metric-card"><div class="metric-label">Moyenne 12 mois</div>' +
+          '<div class="metric-value">' + avgRate + '<span style="font-size:14px">%</span></div></div>' +
+        '<div class="metric-card"><div class="metric-label">Tendance</div>' +
+          '<div class="metric-value" style="font-size:16px;color:' + (trendColor[trend]||'#6b7280') + '">' + (trendLabel[trend]||'—') + '</div></div>' +
+        '<div class="metric-card"><div class="metric-label">Total impressions</div>' +
+          '<div class="metric-value">' + monthly.reduce(function(s,m){ return s+parseInt(m.total||0); },0) + '</div></div>' +
+      '</div>' +
+
+      // Graphique
+      '<div class="card" style="margin-bottom:16px">' +
+        '<div class="card-header"><span class="card-title">Évolution du taux de réussite — 12 mois</span></div>' +
+        '<canvas id="chart-success-rate" height="100"></canvas>' +
+      '</div>' +
+
+      // Tableau détail
+      '<div class="card"><div class="card-header"><span class="card-title">Détail mensuel</span></div>' +
+        '<table><thead><tr>' +
+          '<th>Mois</th><th>Impressions</th><th>Réussies</th><th>Échouées</th><th>Taux %</th><th>Heures</th><th>Filament</th>' +
+        '</tr></thead><tbody>' +
+        monthly.slice().reverse().map(function(m) {
+          const rate = parseFloat(m.rate||0);
+          const rCol = rate >= 90 ? '#10b981' : rate >= 70 ? '#f59e0b' : '#ef4444';
+          return '<tr>' +
+            '<td style="font-weight:500">' + m.month + '</td>' +
+            '<td style="text-align:center">' + m.total + '</td>' +
+            '<td style="text-align:center;color:#10b981">' + m.success + '</td>' +
+            '<td style="text-align:center;color:#ef4444">' + (m.failed||0) + '</td>' +
+            '<td style="text-align:center;font-weight:700;color:' + rCol + '">' + rate + '%</td>' +
+            '<td style="text-align:right;color:var(--text3)">' + (m.hours||0) + 'h</td>' +
+            '<td style="text-align:right;color:var(--text3)">' + (m.filament_g ? Math.round(m.filament_g)+'g' : '—') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+
+    content.innerHTML = html;
+
+    // Graphique Chart.js
+    if (typeof Chart !== 'undefined') {
+      const ctx = document.getElementById('chart-success-rate');
+      if (ctx) {
+        new Chart(ctx.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: monthly.map(function(m){ return m.month; }),
+            datasets: [
+              {
+                label: 'Taux de réussite %',
+                data:  monthly.map(function(m){ return parseFloat(m.rate||0); }),
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59,130,246,0.1)',
+                borderWidth: 2,
+                pointRadius: 4,
+                pointBackgroundColor: monthly.map(function(m){
+                  const r = parseFloat(m.rate||0);
+                  return r >= 90 ? '#10b981' : r >= 70 ? '#f59e0b' : '#ef4444';
+                }),
+                tension: 0.3,
+                fill: true,
+              },
+              {
+                label: 'Objectif 90%',
+                data:  monthly.map(function(){ return 90; }),
+                borderColor: 'rgba(16,185,129,0.4)',
+                borderDash: [5, 5],
+                borderWidth: 1,
+                pointRadius: 0,
+                fill: false,
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              y: {
+                min: 0, max: 100,
+                ticks: { callback: function(v){ return v + '%'; } }
+              }
+            },
+            plugins: {
+              legend: { position: 'bottom', labels: { font: { size: 11 } } },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) {
+                    const m = monthly[ctx.dataIndex];
+                    if (!m) return ctx.dataset.label + ': ' + ctx.parsed.y + '%';
+                    return ctx.dataset.label + ': ' + ctx.parsed.y + '% (' + m.success + '/' + m.total + ')';
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+    }
+  } catch(e) {
+    content.innerHTML = '<div style="color:var(--danger)">' + e.message + '</div>';
+  }
+}
+
+// ── Prédiction épuisement stock filaments ────────────────────────────────
+async function renderStatsStockPrediction() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
+
+  const existingDays = document.getElementById('stock-pred-days');
+  const days = existingDays ? existingDays.value : '30';
+
+  try {
+    const data = await API.get('/stats/stock-prediction?days=' + days);
+    const preds = data.predictions || [];
+
+    const active = preds.filter(function(p){ return p.stock_pct > 0; });
+    const critical = active.filter(function(p){ return p.status === 'critical'; });
+    const low      = active.filter(function(p){ return p.status === 'low'; });
+    const warning  = active.filter(function(p){ return p.status === 'warning'; });
+
+    const statusIcon  = { critical:'🔴', low:'🟠', warning:'🟡', ok:'🟢' };
+    const statusLabel = { critical:'Critique (< 10%)', low:'Faible (< 20%)', warning:'Attention (< 4 semaines)', ok:'OK' };
+    const statusColor = { critical:'#ef4444', low:'#f59e0b', warning:'#f59e0b', ok:'#10b981' };
+
+    let html =
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">' +
+        '<select id="stock-pred-days" onchange="renderStatsStockPrediction()" style="font-size:12px">' +
+          [['7','7 jours'],['14','14 jours'],['30','30 jours'],['60','60 jours'],['90','90 jours']].map(function(o){
+            return '<option value="' + o[0] + '"' + (days===o[0]?' selected':'') + '>Période : ' + o[1] + '</option>';
+          }).join('') +
+        '</select>' +
+        '<span style="font-size:12px;color:var(--text3)">Basé sur la consommation des ' + days + ' derniers jours</span>' +
+      '</div>';
+
+    // Résumé alertes
+    if (critical.length || low.length || warning.length) {
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">';
+      if (critical.length) html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius);padding:12px;text-align:center"><div style="font-size:20px">🔴</div><div style="font-weight:600;color:#ef4444">' + critical.length + ' critique' + (critical.length>1?'s':'') + '</div></div>';
+      if (low.length)      html += '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius);padding:12px;text-align:center"><div style="font-size:20px">🟠</div><div style="font-weight:600;color:#f59e0b">' + low.length + ' faible' + (low.length>1?'s':'') + '</div></div>';
+      if (warning.length)  html += '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius);padding:12px;text-align:center"><div style="font-size:20px">🟡</div><div style="font-weight:600;color:#f59e0b">' + warning.length + ' à surveiller</div></div>';
+      html += '</div>';
+    }
+
+    // Tableau principal
+    html += '<div class="card"><div class="card-header"><span class="card-title">Prédiction par filament</span></div>' +
+      '<table><thead><tr>' +
+        '<th>Filament</th><th>Matière</th><th>Stock</th><th>%</th>' +
+        '<th>Consommation/semaine</th><th>Semaines restantes</th><th>Épuisement estimé</th><th>Statut</th>' +
+      '</tr></thead><tbody>' +
+      active.map(function(p) {
+        const col = statusColor[p.status] || 'var(--text3)';
+        const pctBar = '<div style="display:flex;align-items:center;gap:6px">' +
+          '<div style="width:60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">' +
+            '<div style="height:100%;width:' + Math.min(100,p.stock_pct) + '%;background:' + col + ';border-radius:3px"></div>' +
+          '</div>' +
+          '<span style="font-size:12px;color:' + col + ';font-weight:600">' + p.stock_pct + '%</span>' +
+        '</div>';
+
+        return '<tr>' +
+          '<td>' +
+            '<div style="display:flex;align-items:center;gap:6px">' +
+              '<span style="width:8px;height:8px;border-radius:50%;background:' + (p.color_hex||'#888') + ';flex-shrink:0;display:inline-block"></span>' +
+              '<span style="font-weight:500;font-size:13px">' + p.name + '</span>' +
+            '</div>' +
+          '</td>' +
+          '<td style="font-size:12px;color:var(--text3)">' + (p.material||'—') + '</td>' +
+          '<td style="font-size:12px;font-weight:500">' + Math.round(p.weight_remaining) + 'g</td>' +
+          '<td>' + pctBar + '</td>' +
+          '<td style="font-size:12px;text-align:center">' +
+            (p.weekly_rate_g > 0 ? '<span style="color:var(--text2)">' + p.weekly_rate_g + 'g/sem</span>' : '<span style="color:var(--text3)">Non utilisé</span>') +
+          '</td>' +
+          '<td style="font-size:12px;text-align:center;font-weight:600;color:' + col + '">' +
+            (p.weeks_left !== null ? (p.weeks_left < 1 ? '< 1 semaine' : p.weeks_left + ' sem.') : '—') +
+          '</td>' +
+          '<td style="font-size:12px;color:var(--text3)">' +
+            (p.depletion_date ? new Date(p.depletion_date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}) : '—') +
+          '</td>' +
+          '<td>' +
+            '<span style="font-size:11px;font-weight:500;color:' + col + '">' +
+              (statusIcon[p.status]||'') + ' ' + (statusLabel[p.status]||'') +
+            '</span>' +
+          '</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+
+    // Filaments non utilisés
+    const unused = preds.filter(function(p){ return p.weekly_rate_g === 0 && p.stock_pct > 0; });
+    if (unused.length) {
+      html += '<div style="margin-top:12px;font-size:12px;color:var(--text3);text-align:center">' +
+        unused.length + ' filament' + (unused.length>1?'s':'') + ' non utilisé' + (unused.length>1?'s':'') +
+        ' sur la période (' + unused.map(function(u){ return u.name; }).join(', ') + ')' +
+      '</div>';
+    }
+
+    content.innerHTML = html;
+  } catch(e) {
+    content.innerHTML = '<div style="color:var(--danger)">' + e.message + '</div>';
+  }
 }

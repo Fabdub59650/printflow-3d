@@ -574,4 +574,4 @@ async function testSmtpConnection(cfg) {
   return { ok: true };
 }
 
-module.exports = { sendWeeklyReport, testSmtpConnection, getSmtpConfig, collectReportData };
+module.exports = { sendWeeklyReport, testSmtpConnection, getSmtpConfig, collectReportData, createTransporter };
