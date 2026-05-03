@@ -12,6 +12,14 @@ document.addEventListener('keydown', function(e) {
     const input = document.getElementById('global-search-input');
     if (input) { input.focus(); input.select(); }
   }
+  // '/' — ouvrir la recherche (si pas dans un champ de saisie)
+  if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    e.preventDefault();
+    const input = document.getElementById('global-search-input');
+    if (input) { input.focus(); input.select(); }
+  }
   if (e.key === 'Escape') {
     closeSearchDropdown();
     document.getElementById('global-search-input')?.blur();

@@ -23,6 +23,9 @@ const HELP_SECTIONS = [
   <li><strong>⚙ Consommables à remplacer</strong> — buse, plateau ou autres pièces d'usure</li>
 </ul>
 
+<h4>Activité 7 derniers jours</h4>
+<p>Un mini graphique en barres en haut du tableau de bord montre l'activité jour par jour sur les 7 derniers jours. Les barres vertes représentent les impressions réussies, la partie rouge les échecs. Le résumé en bas indique le total, le taux de réussite, les heures et le coût réel.</p>
+
 <h4>Impressions récentes</h4>
 <p>La liste du bas affiche les 8 dernières impressions avec leur statut, durée et filament utilisé.</p>
     `
@@ -82,6 +85,13 @@ const HELP_SECTIONS = [
 
 <h4>Multi-filaments</h4>
 <p>Pour les impressions multi-couleurs, cliquez sur <strong>+ Filament</strong> pour ajouter plusieurs bobines avec leur consommation respective.</p>
+
+<h4>Mode compact</h4>
+<p>Le bouton <strong>☰</strong> dans la barre d'actions bascule en mode compact — les lignes sont plus fines avec moins de colonnes, ce qui permet d'afficher environ deux fois plus d'impressions à l'écran. Votre préférence est mémorisée d'une session à l'autre.</p>
+
+<h4>Modèles d'impression</h4>
+<p>À la création d'une nouvelle impression, un sélecteur <strong>📋 Modèle</strong> apparaît en haut du formulaire. Choisir un modèle pré-remplit automatiquement les températures, hauteur de couche, remplissage et vitesse. Les modèles sont gérés dans <strong>Paramètres → Imprimantes</strong>.</p>
+<p>Depuis la fiche d'une impression, le bouton <strong>📋 Modèle</strong> permet de sauvegarder ses paramètres comme nouveau modèle réutilisable.</p>
 
 <h4>Dupliquer une impression</h4>
 <p>Le bouton <strong>⎘</strong> dans la liste crée une copie de l'impression avec tous ses paramètres, statut remis à "En attente". Utile pour relancer une impression identique.</p>

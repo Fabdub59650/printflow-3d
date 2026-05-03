@@ -352,8 +352,11 @@ function toggleShortcutsHelp() {
     '</div>' +
     '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-top:4px">' +
       '<span style="color:var(--text2)">Recherche</span>' +
-      '<kbd style="background:var(--bg3);border:0.5px solid var(--border2);' +
-      'border-radius:4px;padding:2px 8px;font-family:monospace;font-size:11px;font-weight:600">⌘K</kbd>' +
+      '<span style="display:flex;gap:4px">' +
+        '<kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:2px 8px;font-family:monospace;font-size:11px;font-weight:600">/</kbd>' +
+        '<span style="color:var(--text3);font-size:11px">ou</span>' +
+        '<kbd style="background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:2px 8px;font-family:monospace;font-size:11px;font-weight:600">⌘K</kbd>' +
+      '</span>' +
     '</div>' +
     '<div style="margin-top:10px;font-size:11px;color:var(--text3);text-align:center">' +
       'Appuyez sur <kbd style="background:var(--bg3);border:0.5px solid var(--border2);' +
@@ -408,4 +411,14 @@ function exportExcel(btn) {
   const url = btn.dataset.url;
   if (!url) return;
   window.location.href = url;
+}
+
+// ── Sections repliables ───────────────────────────────────────────────────
+function toggleCollapse(sectionId) {
+  const section = document.getElementById(sectionId);
+  const icon    = document.getElementById(sectionId + '-icon');
+  if (!section) return;
+  const isCollapsed = section.style.display === 'none';
+  section.style.display = isCollapsed ? '' : 'none';
+  if (icon) icon.textContent = isCollapsed ? '▼' : '▶';
 }

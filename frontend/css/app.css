@@ -15,7 +15,7 @@
   --info: #185FA5; --info-bg: #E6F1FB;
   --radius: 8px;
   --radius-lg: 12px;
-  --sidebar-w: 220px;
+  --sidebar-w: 200px;
   --topbar-h: 56px;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 14px;
@@ -63,8 +63,8 @@ body { background: var(--bg); color: var(--text); }
 .logo-mark::after { content: ''; position: absolute; inset: 5px; border: 2px solid var(--bg2); border-radius: 2px; }
 .logo-name { font-weight: 600; font-size: 15px; line-height: 1.1; }
 .logo-sub { font-size: 11px; color: var(--text3); }
-.sidebar-nav { flex: 1; padding: 8px 8px; overflow-y: auto; }
-.nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: var(--radius); color: var(--text2); text-decoration: none; font-size: 13px; transition: background 0.12s, color 0.12s; }
+.sidebar-nav { flex: 1; padding: 4px 6px; overflow-y: auto; }
+.nav-item { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: var(--radius); color: var(--text2); text-decoration: none; font-size: 12px; transition: background 0.12s, color 0.12s; }
 .nav-item:hover { background: var(--bg3); color: var(--text); }
 .nav-item.active { background: var(--accent-bg); color: var(--accent); font-weight: 500; }
 @media (prefers-color-scheme: dark) {

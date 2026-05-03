@@ -348,3 +348,27 @@
 - Kiosque : layout reorganisé (Planning L2, Aujourd'hui L3, Alertes C3 L2-3, Stock C4 L2-3)
 - Kiosque : 502 au démarrage → sleep 15 dans .xinitrc
 - Sélecteur période prédiction stock : ne s'appliquait pas → passage de la valeur en paramètre
+
+---
+
+## [2.9.4] — 2026-05-03
+
+### Ajouté
+- **Modèles d'impression** — profils de paramètres réutilisables (températures, couche, remplissage, vitesse)
+  - Sélecteur dans le formulaire nouvelle impression
+  - Bouton "📋 Modèle" dans la fiche pour sauvegarder les paramètres d'une impression
+  - Gestion complète dans Paramètres → Imprimantes
+- **Mode compact impressions** — bouton ☰ pour afficher ~2x plus d'impressions à l'écran
+  - Préférence mémorisée entre les sessions
+- **Raccourci "/" recherche** — en plus de Ctrl+K / ⌘K
+- **Logs d'erreurs backend** — Paramètres → Système, 200 dernières erreurs avec filtre et bouton vider
+- **Sections repliables** — Consommables et Modèles d'impression dans Paramètres → Imprimantes
+- **Aide mise à jour** — toutes les fonctionnalités v2.8-v2.9 documentées
+
+### Modifié
+- Tarif électricité déplacé vers Paramètres → Imprimantes (logique avec les coûts machines)
+- Modèles d'impression placés dans Paramètres → Imprimantes (sous les consommables)
+
+### Corrigé
+- Mode compact : renderPrintRows → renderPrintsTable (fonction inexistante)
+- Sections repliables : consommables ne se repliait pas

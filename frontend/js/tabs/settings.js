@@ -290,21 +290,6 @@ async function renderSettings() {
 
     case 'donnees':
       el.innerHTML = `
-    <!-- ── Tarification ────────────────────────────── -->
-    <div class="card">
-      <div class="card-header"><span class="card-title">Tarification</span></div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Tarif électricité (€/kWh)</label>
-          <input id="set-electricity-rate" type="number" step="0.001" min="0"
-                 value="${settings.quote_electricity_rate||'0.20'}"
-                 placeholder="ex: 0.20">
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">
-            Utilisé pour calculer le coût réel des impressions et des devis.
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- ── Bibliothèque ───────────────────────────── -->
     <div class="card">
@@ -848,10 +833,14 @@ async function renderSettings() {
 
     <!-- ── Consommables — modèles prédéfinis ────── -->
     <div class="card">
-      <div class="card-header">
+      <div class="card-header" style="cursor:pointer" onclick="toggleCollapse('consumable-section')">
         <span class="card-title">Consommables — modèles prédéfinis</span>
-        <button class="btn btn-sm btn-primary" onclick="openAddConsumableTemplate()">+ Nouveau modèle</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();openAddConsumableTemplate()">+ Nouveau modèle</button>
+          <span id="consumable-section-icon" style="font-size:12px;color:var(--text3)">▼</span>
+        </div>
       </div>
+      <div id="consumable-section">
       <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
         Ces modèles apparaissent comme suggestions lors de l'ajout d'un consommable sur une imprimante.
         Modifiez les intervalles selon votre matériel.
@@ -859,6 +848,39 @@ async function renderSettings() {
       <div id="consumable-templates-list">
         <div style="color:var(--text3);font-size:13px">Chargement…</div>
       </div>
+      </div><!-- /consumable-section -->
+    </div>
+    <!-- ── Tarification ────────────────────────────── -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Tarification</span></div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Tarif électricité (€/kWh)</label>
+          <input id="set-electricity-rate" type="number" step="0.001" min="0"
+                 value="${settings.quote_electricity_rate||'0.20'}"
+                 placeholder="ex: 0.20">
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">
+            Utilisé pour calculer le coût réel des impressions et des devis.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Modèles d'impression ─────────────────── -->
+    <div class="card">
+      <div class="card-header" style="cursor:pointer" onclick="toggleCollapse('print-templates-section')">
+        <span class="card-title">Modèles d'impression</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();openAddPrintTemplate()">+ Ajouter</button>
+          <span id="print-templates-section-icon" style="font-size:12px;color:var(--text3)">▼</span>
+        </div>
+      </div>
+      <div id="print-templates-section">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
+        Profils de paramètres réutilisables lors de la création d'une impression.
+      </p>
+      <div id="print-templates-list"><span style="color:var(--text3);font-size:13px">Chargement…</span></div>
+      </div><!-- /print-templates-section -->
     </div>`;
       API.get('/printers').then(function(printers) {
         const el2 = document.getElementById('printer-access-table');
@@ -875,6 +897,7 @@ async function renderSettings() {
         }).join('');
       });
       loadConsumableTemplates();
+      loadPrintTemplates();
       break;
 
     case 'systeme':
@@ -907,8 +930,28 @@ async function renderSettings() {
       <div id="update-check-content">
         <div style="color:var(--text3);font-size:13px;padding:4px 0">Cliquez sur "Vérifier" pour rechercher une mise à jour.</div>
       </div>
+    </div>
+
+    <!-- ── Logs d'erreurs ────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Logs d'erreurs backend</span>
+        <div style="display:flex;gap:6px">
+          <select id="log-level-filter" onchange="loadBackendLogs()" style="font-size:12px">
+            <option value="">Tous</option>
+            <option value="error">Erreurs</option>
+            <option value="warn">Avertissements</option>
+          </select>
+          <button class="btn btn-sm" onclick="loadBackendLogs()">↻</button>
+          <button class="btn btn-sm btn-danger" onclick="clearBackendLogs()">Vider</button>
+        </div>
+      </div>
+      <div id="backend-logs-content">
+        <div style="color:var(--text3);font-size:13px">Chargement…</div>
+      </div>
     </div>`;
       loadSystemHealth();
+      loadBackendLogs();
       break;
   }
 }
@@ -2321,4 +2364,149 @@ async function installUpdate(version, downloadUrl) {
   } catch(e) {
     if (el) el.innerHTML = '<div style="color:var(--danger);font-size:13px">Erreur : ' + e.message + '</div>';
   }
+}
+
+// ── Logs d'erreurs backend ────────────────────────────────────────────────
+async function loadBackendLogs() {
+  const el = document.getElementById('backend-logs-content');
+  if (!el) return;
+  const level = document.getElementById('log-level-filter')?.value || '';
+  try {
+    const logs = await API.get('/logs' + (level ? '?level=' + level : ''));
+    if (!logs.length) {
+      el.innerHTML = '<div style="color:var(--success);font-size:13px;padding:4px 0">✓ Aucune erreur enregistrée</div>';
+      return;
+    }
+    const levelColor = { error: '#ef4444', warn: '#f59e0b', info: '#3b82f6' };
+    const levelIcon  = { error: '✗', warn: '⚠', info: 'ℹ' };
+    el.innerHTML =
+      '<div style="max-height:400px;overflow-y:auto;font-family:monospace">' +
+      logs.map(function(l) {
+        const col  = levelColor[l.level] || 'var(--text3)';
+        const icon = levelIcon[l.level]  || '•';
+        const time = new Date(l.ts).toLocaleString('fr-FR', {
+          day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
+        return '<div style="border-bottom:1px solid var(--border);padding:6px 0;display:flex;gap:8px;align-items:flex-start">' +
+          '<span style="color:' + col + ';flex-shrink:0;font-size:12px">' + icon + '</span>' +
+          '<span style="font-size:11px;color:var(--text3);flex-shrink:0;min-width:130px">' + time + '</span>' +
+          '<span style="font-size:12px;color:' + col + ';word-break:break-all;white-space:pre-wrap">' +
+            l.message.replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+          '</span>' +
+        '</div>';
+      }).join('') +
+      '</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:8px">' + logs.length + ' entrée(s) · Les logs sont en mémoire et réinitialisés au redémarrage du service.</div>';
+  } catch(e) {
+    if (el) el.innerHTML = '<div style="color:var(--danger);font-size:13px">Erreur : ' + e.message + '</div>';
+  }
+}
+
+async function clearBackendLogs() {
+  try {
+    await API.del('/logs');
+    toast('Logs vidés', 'success');
+    loadBackendLogs();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Gestion modèles d'impression ──────────────────────────────────────────
+async function loadPrintTemplates() {
+  const el = document.getElementById('print-templates-list');
+  if (!el) return;
+  try {
+    const list = await API.get('/print-templates');
+    if (!list.length) {
+      el.innerHTML = '<span style="color:var(--text3);font-size:13px">Aucun modèle.</span>';
+      return;
+    }
+    el.innerHTML = '<table><thead><tr>' +
+      '<th>Nom</th><th>Matière</th><th>Buse</th><th>Plateau</th><th>Couche</th><th>Remplis.</th><th>Vitesse</th><th>Utilisé</th><th></th>' +
+      '</tr></thead><tbody>' +
+      list.map(function(t) {
+        return '<tr>' +
+          '<td style="font-weight:500">' + t.name + '</td>' +
+          '<td style="color:var(--text3)">' + (t.material||'—') + '</td>' +
+          '<td style="text-align:center">' + (t.temp_nozzle ? t.temp_nozzle+'°C' : '—') + '</td>' +
+          '<td style="text-align:center">' + (t.temp_bed ? t.temp_bed+'°C' : '—') + '</td>' +
+          '<td style="text-align:center">' + (t.layer_height ? t.layer_height+'mm' : '—') + '</td>' +
+          '<td style="text-align:center">' + (t.infill_percent ? t.infill_percent+'%' : '—') + '</td>' +
+          '<td style="text-align:center">' + (t.print_speed ? t.print_speed+'mm/s' : '—') + '</td>' +
+          '<td style="text-align:center;color:var(--text3)">' + (t.use_count||0) + 'x</td>' +
+          '<td style="text-align:right;white-space:nowrap">' +
+            '<button class="btn btn-sm" onclick="editPrintTemplate(' + t.id + ')">✏</button> ' +
+            '<button class="btn btn-sm btn-danger" onclick="deletePrintTemplate(' + t.id + ')">✕</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table>';
+  } catch(e) { if (el) el.innerHTML = '<span style="color:var(--danger)">' + e.message + '</span>'; }
+}
+
+function openAddPrintTemplate(existing) {
+  const t = existing || {};
+  openModal(
+    '<div class="form-grid">' +
+      '<div class="form-group full"><label class="form-label">Nom *</label>' +
+        '<input id="tpl-name" value="' + (t.name||'') + '" placeholder="ex: PLA Standard"></div>' +
+      '<div class="form-group"><label class="form-label">Matière</label>' +
+        '<input id="tpl-material" value="' + (t.material||'') + '" placeholder="PLA, PETG, TPU..."></div>' +
+      '<div class="form-group"><label class="form-label">Temp. buse (°C)</label>' +
+        '<input id="tpl-nozzle" type="number" value="' + (t.temp_nozzle||'') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Temp. plateau (°C)</label>' +
+        '<input id="tpl-bed" type="number" value="' + (t.temp_bed||'') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Hauteur couche (mm)</label>' +
+        '<input id="tpl-layer" type="number" step="0.01" value="' + (t.layer_height||'') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Remplissage (%)</label>' +
+        '<input id="tpl-infill" type="number" value="' + (t.infill_percent||'') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Vitesse (mm/s)</label>' +
+        '<input id="tpl-speed" type="number" value="' + (t.print_speed||'') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Ventilateur (%)</label>' +
+        '<input id="tpl-fan" type="number" value="' + (t.fan_speed||'') + '"></div>' +
+      '<div class="form-group full"><label class="form-label">Notes</label>' +
+        '<input id="tpl-notes" value="' + (t.notes||'').replace(/"/g,'&quot;') + '"></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="savePrintTemplate(' + (t.id||'null') + ')">' + (t.id?'Enregistrer':'Ajouter') + '</button>' +
+    '</div>',
+    t.id ? 'Modifier le modèle' : 'Nouveau modèle d\'impression'
+  );
+}
+
+async function savePrintTemplate(id) {
+  const name = document.getElementById('tpl-name')?.value?.trim();
+  if (!name) return toast('Nom requis', 'error');
+  const body = {
+    name,
+    material:       document.getElementById('tpl-material')?.value || null,
+    temp_nozzle:    parseInt(document.getElementById('tpl-nozzle')?.value) || null,
+    temp_bed:       parseInt(document.getElementById('tpl-bed')?.value) || null,
+    layer_height:   parseFloat(document.getElementById('tpl-layer')?.value) || null,
+    infill_percent: parseInt(document.getElementById('tpl-infill')?.value) || null,
+    print_speed:    parseInt(document.getElementById('tpl-speed')?.value) || null,
+    fan_speed:      parseInt(document.getElementById('tpl-fan')?.value) || null,
+    notes:          document.getElementById('tpl-notes')?.value || null,
+  };
+  try {
+    if (id) await API.put('/print-templates/' + id, body);
+    else     await API.post('/print-templates', body);
+    closeModal();
+    toast(id ? 'Modèle mis à jour' : 'Modèle ajouté', 'success');
+    loadPrintTemplates();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function editPrintTemplate(id) {
+  const list = await API.get('/print-templates');
+  const t = list.find(function(x){ return x.id === id; });
+  if (t) openAddPrintTemplate(t);
+}
+
+async function deletePrintTemplate(id) {
+  confirmDelete('Supprimer ce modèle ?', async function() {
+    await API.del('/print-templates/' + id);
+    toast('Modèle supprimé');
+    loadPrintTemplates();
+  });
 }

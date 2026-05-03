@@ -10,7 +10,17 @@ let printsFilters = {
 };
 let _printsAdvancedOpen = false;
 
+let _compactPrints = false;
+
+function toggleCompactPrints(btn) {
+  _compactPrints = !_compactPrints;
+  if (btn) btn.textContent = _compactPrints ? '⊞' : '☰';
+  try { localStorage.setItem('pf_compact_prints', _compactPrints ? '1' : '0'); } catch(_) {}
+  renderPrintsTable();
+}
+
 async function renderPrints() {
+  try { _compactPrints = localStorage.getItem('pf_compact_prints') === '1'; } catch(_) {}
   document.getElementById('page-title').textContent = 'Impressions';
   if (!document.getElementById('prints-filter-style')) {
     const s = document.createElement('style');
@@ -20,6 +30,9 @@ async function renderPrints() {
   }
   document.getElementById('topbar-actions').innerHTML =
     '<button class="btn" onclick="exportExcel(this)" data-url="/api/excel/impressions">&#8595; Excel</button> ' +
+    '<button class="btn btn-sm" onclick="toggleCompactPrints(this)" title="Mode compact" id="compact-prints-btn">' +
+      (_compactPrints ? '⊞' : '☰') +
+    '</button> ' +
     '<button class="btn btn-primary" onclick="openPrintForm()">+ Nouvelle impression</button>';
   document.getElementById('content').innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 
@@ -251,11 +264,32 @@ function renderPrintsTable() {
     return;
   }
   wrap.innerHTML =
-    '<table><thead><tr>' +
-      '<th></th><th>Projet</th><th>Imprimante</th><th>Filament</th><th>Note</th>' +
-      '<th>Durée</th><th>Consommé</th><th>Coût réel</th><th>Date</th><th>Statut</th><th></th>' +
+    '<table' + (_compactPrints ? ' style="font-size:12px"' : '') + '><thead><tr>' +
+      (_compactPrints
+        ? '<th>Nom</th><th>Imprimante</th><th>Filament</th><th>Durée</th><th>Coût</th><th>Date</th><th>Statut</th><th></th>'
+        : '<th></th><th>Projet</th><th>Imprimante</th><th>Filament</th><th>Note</th><th>Durée</th><th>Consommé</th><th>Coût réel</th><th>Date</th><th>Statut</th><th></th>'
+      ) +
     '</tr></thead><tbody>' +
     data.map(function(p) {
+      if (_compactPrints) {
+        return '<tr style="height:28px">' +
+          '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+            '<span style="font-weight:500;cursor:pointer" onclick="openPrintDetail(' + p.id + ')">' + p.name + '</span>' +
+          '</td>' +
+          '<td style="color:var(--text3)">' + (p.printer_name || '—') + '</td>' +
+          '<td>' + renderFilamentCell(p) + '</td>' +
+          '<td style="color:var(--text3)">' + fmtDuration(p.actual_duration || p.estimated_duration) + '</td>' +
+          '<td style="color:' + (p.real_cost ? 'var(--success)' : 'var(--text3)') + '">' +
+            (p.real_cost ? parseFloat(p.real_cost).toFixed(2) + '€' : '—') +
+          '</td>' +
+          '<td style="color:var(--text3);white-space:nowrap">' + fmtDateTime(p.created_at) + '</td>' +
+          '<td>' + statusBadge(p.status) + '</td>' +
+          '<td><div class="td-actions">' +
+            '<button class="btn btn-sm" onclick="openPrintDetail(' + p.id + ')">Détail</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="deletePrint(' + p.id + ')">✕</button>' +
+          '</div></td>' +
+        '</tr>';
+      }
       const thumbHtml = p.photo_path
         ? '<img src="/api/prints/' + p.id + '/photo?t=' + Date.now() + '" ' +
           'style="width:36px;height:36px;object-fit:cover;border-radius:4px;cursor:pointer" ' +
@@ -440,22 +474,124 @@ async function openPrintDetail(id) {
       '<button class="btn" onclick="closeModal()">Fermer</button>' +
       '<button class="btn" onclick="exportPrintPDF(' + p.id + ')">↓ PDF</button>' +
       '<button class="btn" onclick="closeModal();duplicatePrint(' + p.id + ')">⎘ Dupliquer</button>' +
+      '<button class="btn" onclick="saveAsPrintTemplate(' + p.id + ')">📋 Modèle</button>' +
       '<button class="btn btn-primary" onclick="closeModal();openPrintForm(' + p.id + ')">Modifier</button>' +
     '</div>',
     p.name
   );
 }
 
+// ── Modèles d'impression ─────────────────────────────────────────────────
+
+function applyPrintTemplate(templateId) {
+  const sel = document.getElementById('prf-template');
+  if (!sel || !templateId) return;
+  const opt = sel.querySelector('option[value="' + templateId + '"]');
+  if (!opt) return;
+
+  // Remplir les champs du formulaire
+  const fields = {
+    'prf-temp-nozzle': opt.dataset.nozzle,
+    'prf-temp-bed':    opt.dataset.bed,
+    'prf-layer':       opt.dataset.layer,
+    'prf-infill':      opt.dataset.infill,
+    'prf-speed':       opt.dataset.speed,
+  };
+  Object.entries(fields).forEach(function(entry) {
+    const el = document.getElementById(entry[0]);
+    if (el && entry[1]) el.value = entry[1];
+  });
+
+  // Supports
+  const supportsEl = document.getElementById('prf-supports');
+  if (supportsEl) supportsEl.checked = opt.dataset.supports === '1';
+
+  // Notes — ajouter si vide
+  const notesEl = document.getElementById('prf-notes');
+  if (notesEl && !notesEl.value && opt.dataset.notes) {
+    notesEl.value = opt.dataset.notes;
+  }
+
+  toast('Modèle "' + opt.textContent.trim() + '" appliqué', 'success');
+
+  // Incrémenter le compteur d'utilisation
+  API.post('/print-templates/' + templateId + '/use', {}).catch(function(){});
+}
+
+async function saveAsPrintTemplate(printId) {
+  const p = await API.get('/prints/' + printId);
+  openModal(
+    '<div class="form-grid">' +
+      '<div class="form-group full">' +
+        '<label class="form-label">Nom du modèle *</label>' +
+        '<input id="tpl-name" value="' + (p.material ? p.material + ' Standard' : 'Mon modèle') + '" placeholder="ex: PLA Rapide">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Matière</label>' +
+        '<input id="tpl-material" value="' + (p.material||'') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Temp. buse (°C)</label>' +
+        '<input id="tpl-nozzle" type="number" value="' + (p.print_temp||'') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Temp. plateau (°C)</label>' +
+        '<input id="tpl-bed" type="number" value="' + (p.bed_temp||'') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Hauteur couche (mm)</label>' +
+        '<input id="tpl-layer" type="number" step="0.01" value="' + (p.layer_height||'') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Remplissage (%)</label>' +
+        '<input id="tpl-infill" type="number" value="' + (p.infill_percent||'') + '">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Vitesse (mm/s)</label>' +
+        '<input id="tpl-speed" type="number" value="' + (p.print_speed||'') + '">' +
+      '</div>' +
+      '<div class="form-group full">' +
+        '<label class="form-label">Notes</label>' +
+        '<input id="tpl-notes" value="" placeholder="Optionnel">' +
+      '</div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal()">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="confirmSaveTemplate()">Sauvegarder</button>' +
+    '</div>',
+    'Sauvegarder comme modèle'
+  );
+}
+
+async function confirmSaveTemplate() {
+  const name = document.getElementById('tpl-name')?.value?.trim();
+  if (!name) return toast('Nom requis', 'error');
+  try {
+    await API.post('/print-templates', {
+      name,
+      material:       document.getElementById('tpl-material')?.value || null,
+      temp_nozzle:    parseInt(document.getElementById('tpl-nozzle')?.value) || null,
+      temp_bed:       parseInt(document.getElementById('tpl-bed')?.value) || null,
+      layer_height:   parseFloat(document.getElementById('tpl-layer')?.value) || null,
+      infill_percent: parseInt(document.getElementById('tpl-infill')?.value) || null,
+      print_speed:    parseInt(document.getElementById('tpl-speed')?.value) || null,
+      notes:          document.getElementById('tpl-notes')?.value || null,
+    });
+    closeModal();
+    toast('Modèle "' + name + '" sauvegardé', 'success');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
 async function openPrintForm(id = null, prefillProjectId = null, defaultStatus = null, isDuplicate = false) {
-  const [printers, filaments, projects, libraryObjects] = await Promise.all([
+  const [printers, filaments, projects, libraryObjects, templates] = await Promise.all([
     API.get('/printers'),
     API.get('/filaments'),
     window._projectsEnabled ? API.get('/projects') : Promise.resolve([]),
     API.get('/library/objects').catch(() => []),
+    API.get('/print-templates').catch(() => []),
   ]);
   const p = id ? allPrints.find(x => x.id === id) || await API.get('/prints/' + id) : {};
   if (!id && defaultStatus) p.status = defaultStatus;
-  // Appliquer les données source si duplication
   if (isDuplicate && window._duplicateSource) {
     Object.assign(p, window._duplicateSource);
     window._duplicateSource = null;
@@ -464,6 +600,26 @@ async function openPrintForm(id = null, prefillProjectId = null, defaultStatus =
   const selectedObject  = p.library_object_id || '';
 
   openModal(`
+    <!-- ── Modèle d'impression ───────────────────────────── -->
+    ${!id && templates.length ? `
+    <div style="margin-bottom:12px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <label class="form-label" style="margin:0;flex-shrink:0">📋 Modèle :</label>
+        <select id="prf-template" onchange="applyPrintTemplate(this.value)" style="flex:1;font-size:12px">
+          <option value="">— Choisir un modèle —</option>
+          ${templates.map(t => `<option value="${t.id}"
+            data-nozzle="${t.temp_nozzle||''}"
+            data-bed="${t.temp_bed||''}"
+            data-layer="${t.layer_height||''}"
+            data-infill="${t.infill_percent||''}"
+            data-speed="${t.print_speed||''}"
+            data-supports="${t.supports||0}"
+            data-material="${t.material||''}"
+            data-notes="${(t.notes||'').replace(/"/g,'&quot;')}"
+          >${t.name}${t.material?' ('+t.material+')':''}</option>`).join('')}
+        </select>
+      </div>
+    </div>` : ''}
     <!-- ── Identification ───────────────────────────────── -->
     <div style="margin-bottom:12px">
       <label class="form-label">Nom *</label>

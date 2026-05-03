@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./logger'); // Charger en premier pour capturer toutes les erreurs
 const express = require('express');
 const cors    = require('cors');
 const path    = require('path');
@@ -99,6 +100,8 @@ app.use('/api/schedule',      require('./routes/schedule'));
 app.use('/api/spool-weights', require('./routes/spool-weights'));
 app.use('/api/updater',      require('./routes/updater'));
 app.use('/api/excel',        require('./routes/excel-export'));
+app.use('/api/logs',              require('./routes/logs'));
+app.use('/api/print-templates',  require('./routes/print-templates'));
 // Rapport hebdomadaire
 app.use('/api/report', require('./routes/report'));
 
