@@ -79,7 +79,7 @@ function renderLibraryLayout() {
         <div style="font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;
                     letter-spacing:0.06em;margin-bottom:10px">Thèmes</div>
         ${themeItem(null, 'Tout', null)}
-        ${allThemes.map(t => themeItem(t.id, t.name, t.level, t.file_count+t.object_count)).join('')}
+        ${allThemes.map(t => themeItem(t.id, t.name, t.level, t.object_count)).join('')}
         <button class="btn btn-sm" style="width:100%;margin-top:10px;font-size:11px"
           onclick="openThemeForm()">+ Nouveau thème</button>
       </div>
@@ -753,6 +753,14 @@ function openUploadForm(prefillObjectId=null) {
         <label class="form-label">Description</label>
         <textarea id="lib-desc" style="min-height:60px"></textarea>
       </div>
+      <div class="form-group">
+        <label class="form-label">Quantité à imprimer</label>
+        <input id="lib-quantity" type="number" min="1" max="99" value="1" style="width:80px">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Couleur recommandée</label>
+        <input id="lib-color-ref" placeholder="ex: Blanc, Rouge, Noir…">
+      </div>
       <div class="form-group full">
         <label class="form-label">Matières recommandées</label>
         <div id="upload-materials-picker" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
@@ -802,6 +810,8 @@ async function uploadFile() {
   fd.append('description', document.getElementById('lib-desc').value);
   fd.append('source_url',  document.getElementById('lib-url').value);
   fd.append('version',     document.getElementById('lib-version')?.value || '');
+  fd.append('quantity',    document.getElementById('lib-quantity')?.value || '1');
+  fd.append('color_ref',   document.getElementById('lib-color-ref')?.value || '');
   const uploadMatSpans = document.querySelectorAll('#upload-materials-picker [data-mat]');
   const uploadMats = Array.from(uploadMatSpans).filter(function(s){ return s.dataset.selected==='1'; }).map(function(s){ return s.dataset.mat; });
   if (uploadMats.length) fd.append('recommended_materials', uploadMats.join(','));

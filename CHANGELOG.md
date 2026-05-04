@@ -372,3 +372,13 @@
 ### Corrigé
 - Mode compact : renderPrintRows → renderPrintsTable (fonction inexistante)
 - Sections repliables : consommables ne se repliait pas
+
+### Ajouté (suite v2.9.4)
+- **Kiosque — Écran de veille** — fond noir avec horloge plein écran, date et stats du jour après 2 min d'inactivité
+  - Détection via requestAnimationFrame (jamais gelé par Chromium)
+  - Un toucher/clic pour réveiller
+- **Kiosque — Anti-gel RAF** — requestAnimationFrame pour l'horloge et le watchdog de gel
+- **Kiosque — Démarrage fiable** — boucle until curl pour attendre Nginx + PrintFlow avant Chromium
+- **Kiosque — Redémarrage auto** — boucle while true dans .xinitrc si Chromium plante
+- **Bibliothèque — Quantité et couleur à la création** — champs présents dans le formulaire d'import
+- **Bibliothèque — Badge thème** — affiche uniquement les objets directs + sous-thèmes (cohérent avec la navigation)

@@ -44,7 +44,9 @@ router.get('/themes', async (req, res) => {
          COUNT(DISTINCT o.id) AS object_count
        FROM library_themes t
        LEFT JOIN library_files   f ON f.theme_id = t.id
-       LEFT JOIN library_objects o ON o.theme_id = t.id
+       LEFT JOIN library_objects o ON o.theme_id = t.id OR o.theme_id IN (
+         SELECT id FROM library_themes WHERE parent_id = t.id
+       )
        GROUP BY t.id ORDER BY t.sort_order, t.name`
     );
     const map = {}; all.forEach(t => { map[t.id] = { ...t, children: [] }; });
@@ -258,8 +260,8 @@ router.post('/files', upload.single('file'), async (req, res) => {
     const [result] = await db.query(
       `INSERT INTO library_files (name,original_name,file_path,file_size,file_type,
          theme_id,object_id,part_name,description,tags,source_url,recommended_materials,
-         version,changelog,parent_file_id,is_latest)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`,
+         version,changelog,parent_file_id,quantity,color_ref,is_latest)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`,
       [
         fields.name || path.basename(fileName, '.' + fileExt),
         fileName, diskName, fileBuffer.length, fileType,
@@ -268,6 +270,8 @@ router.post('/files', upload.single('file'), async (req, res) => {
         fields.recommended_materials || null,
         fields.version || null, fields.changelog || null,
         fields.parent_file_id || null,
+        parseInt(fields.quantity) || 1,
+        fields.color_ref || null,
       ]
     );
     // Si c'est une nouvelle version, marquer l'ancien comme non-latest
