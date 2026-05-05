@@ -382,3 +382,11 @@
 - **Kiosque — Redémarrage auto** — boucle while true dans .xinitrc si Chromium plante
 - **Bibliothèque — Quantité et couleur à la création** — champs présents dans le formulaire d'import
 - **Bibliothèque — Badge thème** — affiche uniquement les objets directs + sous-thèmes (cohérent avec la navigation)
+
+### Corrigé (final v2.9.4)
+- Kiosque — écran de veille : heure mise à jour via rafLoop (setTimeout gelé par Chromium)
+- Kiosque — écran de veille : détection inactivité via rafLoop (plus de setTimeout)
+- Kiosque — watchdog rechargement : seuil augmenté à 120s (évite rechargement avant veille)
+- Bibliothèque — compteur fichiers : mis à jour après import et retrait de fichier
+- Bibliothèque — badge thème : compte objets directs + sous-thèmes (cohérent avec navigation)
+- Bibliothèque — quantité et couleur : présents à la création d'un fichier

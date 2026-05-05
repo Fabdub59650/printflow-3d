@@ -447,6 +447,7 @@ async function removeFileFromObject(objectId, fileId) {
   try {
     await API.del(`/library/objects/${objectId}/files/${fileId}`);
     toast('Fichier retiré de l\'objet');
+    await loadLibraryContent();
     openObjectDetail(objectId);
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -852,8 +853,8 @@ async function uploadFile() {
     closeModal();
     toast('Fichier importé', 'success');
     // Rouvrir le détail objet si rattaché
+    await loadLibraryContent();
     if (result.object_id) openObjectDetail(result.object_id);
-    else loadLibraryContent();
   } catch (e) {
     toast('Erreur : '+e.message, 'error');
     btn.disabled = false; btn.textContent = 'Importer';

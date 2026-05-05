@@ -1610,9 +1610,21 @@ function rafLoop(ts) {
     showScreensaver();
   }
 
-  // Si > 45s sans refresh → recharger (sauf si écran de veille actif)
+  // Mettre à jour l'heure de l'écran de veille via RAF
+  if (_ssActive) {
+    _lastRefreshRAF = now;
+    const ssTime = document.getElementById('ss-time');
+    if (ssTime) {
+      const d  = new Date();
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      ssTime.textContent = hh + ':' + mm;
+    }
+  }
+
+  // Si > 120s sans refresh → recharger (sauf si écran de veille actif)
   const sinceRefresh = now - _lastRefreshRAF;
-  if (sinceRefresh > 45000 && !_gelDetected && !_ssActive) {
+  if (sinceRefresh > 120000 && !_gelDetected && !_ssActive) {
     _gelDetected = true;
     console.warn('[Kiosk] RAF gel détecté (' + Math.round(sinceRefresh/1000) + 's) — rechargement');
     window.location.reload();
@@ -1631,21 +1643,16 @@ kioskRefresh = async function(manual) {
   return _origKioskRefresh2(manual);
 };
 
-// Aussi mettre à jour _lastRefreshRAF pendant l'écran de veille
-setInterval(function() {
-  if (_ssActive) _lastRefreshRAF = Date.now();
-}, 10000);
-
 document.addEventListener('visibilitychange', function() {
   if (!document.hidden) {
     const elapsed = Date.now() - _lastRefreshRAF;
-    if (elapsed > 30000) { window.location.reload(); }
+    if (elapsed > 120000) { window.location.reload(); }
     else { kioskRefresh(false); }
   }
 });
 
 window.addEventListener('focus', function() {
-  if (Date.now() - _lastRefreshRAF > 30000) { window.location.reload(); }
+  if (Date.now() - _lastRefreshRAF > 120000) { window.location.reload(); }
   else { kioskRefresh(false); }
 });
 
@@ -1675,14 +1682,10 @@ function wakeKiosk() {
 async function updateScreensaver() {
   if (!_ssActive) return;
   const now    = new Date();
-  const hh     = String(now.getHours()).padStart(2,'0');
-  const mm     = String(now.getMinutes()).padStart(2,'0');
   const days   = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
-  const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-  const timeEl  = document.getElementById('ss-time');
+  const months = ['janvier','f\u00e9vrier','mars','avril','mai','juin','juillet','ao\u00fbt','septembre','octobre','novembre','d\u00e9cembre'];
   const dateEl  = document.getElementById('ss-date');
   const statsEl = document.getElementById('ss-stats');
-  if (timeEl) timeEl.textContent = hh + ':' + mm;
   if (dateEl) dateEl.textContent = days[now.getDay()] + ' ' + now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
   try {
     const data = await apiGet('/stats/week7');

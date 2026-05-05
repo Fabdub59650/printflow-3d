@@ -10,7 +10,7 @@ router.get('/', async (req, res) => {
     rows.forEach(r => { settings[r.key_name] = r.value; });
     // Informations de version (non stockées en base)
     settings._version    = '2.9.4';
-    settings._build_date = '04/05/2026';
+    settings._build_date = '05/05/2026';
     res.json(settings);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
