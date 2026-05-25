@@ -1,5 +1,26 @@
 # Changelog PrintFlow-3D
 
+## [2.9.5] — 2026-05-25
+
+### Ajouté
+- **Intégration PixelIt** — affichage pixel art sur matrice LED
+  - Configurateur complet dans Paramètres → Intégrations
+  - Rotation automatique des écrans au démarrage du service
+  - Écrans : horloge, stats d'impression, météo (Open-Meteo, sans clé API)
+  - Notifications : impression terminée, échouée, stock faible
+  - Réglages : activation, IP, luminosité, couleur horloge, durée par écran
+- **Multi-fichiers par impression** — une impression peut contenir plusieurs fichiers avec quantités
+  - Table `print_files` avec quantité par fichier (1 par défaut)
+  - Interface de gestion dans la fiche impression
+- **Fiche impression réorganisée** — meilleure lisibilité des sections
+- **Stats corrigées** — calculs dynamiques sans colonnes cachées
+
+### Corrigé
+- Écran de veille kiosque — emojis remplacés par texte, horloge via `requestAnimationFrame`
+- Export complet — streaming direct `tar` sans copie en RAM
+- Checkboxes PixelIt — alignement texte corrigé
+
+
 ## [2.4.0] — 2026-04-16
 
 ### Ajouté
