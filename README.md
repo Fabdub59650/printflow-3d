@@ -155,7 +155,14 @@ Interface accessible sur **`http://[IP-du-Pi]`** (port 80, proxifié depuis Node
 
 | Version | Date | Highlights |
 |---------|------|-----------|
-| **2.8.0** | 24/04/2026 | Base référence bobines, duplication filament, doc joint bibliothèque, anti-gel kiosque |
+| **2.9.6** | 28/05/2026 | Kiosque déporté Pi 3, stockage SSD, surveillance SSD + alerte Telegram, quirks USB UAS |
+| 2.9.5 | 25/05/2026 | Corrections et stabilisation |
+| 2.9.4 | 03/05/2026 | Modèles d'impression, mode compact, écran de veille kiosque, logs erreurs backend |
+| 2.9.3 | 03/05/2026 | Telegram enrichi (photo, résumé quotidien, maintenance), stats radar imprimantes, prédiction stock kiosque |
+| 2.9.2 | 03/05/2026 | Stats taux de réussite 12 mois, prédiction épuisement stock filaments |
+| 2.9.1 | 02/05/2026 | Correction export Excel |
+| 2.9.0 | 02/05/2026 | Export/Import bibliothèque ZIP, traçabilité devis/paramètres, santé système, mise à jour automatique |
+| 2.8.0 | 24/04/2026 | Base référence bobines, duplication filament, doc joint bibliothèque, anti-gel kiosque |
 | 2.7.0 | 21/04/2026 | Stats rentabilité, clavier kiosque, fournisseur filament, corrections bugs, rotation écran |
 | 2.6.0 | 20/04/2026 | Devis multi-lignes, coût réel impressions, galerie améliorée, rapport enrichi, notifications Telegram, sauvegarde NAS |
 | 2.5.0 | 19/04/2026 | Mode kiosque tactile 1024×600, 3 imprimantes, pesée avec pavé numérique, bypass auth localhost |
