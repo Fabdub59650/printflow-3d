@@ -2,7 +2,7 @@
 
 **Logiciel de gestion d'impressions 3D** — conçu pour tourner sur Raspberry Pi avec une interface web accessible depuis n'importe quel appareil du réseau local.
 
-![Version](https://img.shields.io/badge/version-2.9.1-blue)
+![Version](https://img.shields.io/badge/version-2.9.6-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
@@ -106,6 +106,17 @@
 - Prises **TP-Link Tapo P100** *(optionnel — firmware ≤ 1.3.x)*
 
 ---
+
+## Architecture recommandée
+
+| Composant | Rôle |
+|-----------|------|
+| **Raspberry Pi 4** | Serveur PrintFlow, lecteur NFC, stockage SSD |
+| **Raspberry Pi 3** | Kiosque tactile (Chromium → `http://IP_PI4/kiosk`) |
+| **SSD USB** | Stockage fichiers STL, photos, sauvegardes (`/mnt/data`) |
+
+Le kiosque peut être installé sur un Pi 3 séparé via `scripts/setup-kiosk-pi3.sh`.
+
 
 ## Installation
 
