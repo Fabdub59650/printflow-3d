@@ -1,25 +1,16 @@
+## v2.9.6 — 28/05/2026
+
+### Améliorations infrastructure
+- **Quirks USB UAS** : ajout des chipsets ASMedia `174c:55aa` et `174c:235c` dans `cmdline.txt` pour éviter les freezes SSD
+- **Architecture kiosque** : déport du kiosque sur Pi 3 séparé — nouveau script `scripts/setup-kiosk-pi3.sh`
+- **Stockage SSD** : déplacement de `library/`, `prints/` et `backups/` vers SSD USB monté sur `/mnt/data`
+- **Surveillance SSD** : nouveau script `scripts/check-ssd.js` avec timer systemd (toutes les 5 min) et alerte Telegram si SSD non monté ou espace critique
+
+### Fichiers ajoutés
+- `scripts/check-ssd.js` — surveillance SSD + alerte Telegram
+- `scripts/setup-kiosk-pi3.sh` — installation kiosque standalone Pi 3 / Debian Trixie
+
 # Changelog PrintFlow-3D
-
-## [2.9.5] — 2026-05-25
-
-### Ajouté
-- **Intégration PixelIt** — affichage pixel art sur matrice LED
-  - Configurateur complet dans Paramètres → Intégrations
-  - Rotation automatique des écrans au démarrage du service
-  - Écrans : horloge, stats d'impression, météo (Open-Meteo, sans clé API)
-  - Notifications : impression terminée, échouée, stock faible
-  - Réglages : activation, IP, luminosité, couleur horloge, durée par écran
-- **Multi-fichiers par impression** — une impression peut contenir plusieurs fichiers avec quantités
-  - Table `print_files` avec quantité par fichier (1 par défaut)
-  - Interface de gestion dans la fiche impression
-- **Fiche impression réorganisée** — meilleure lisibilité des sections
-- **Stats corrigées** — calculs dynamiques sans colonnes cachées
-
-### Corrigé
-- Écran de veille kiosque — emojis remplacés par texte, horloge via `requestAnimationFrame`
-- Export complet — streaming direct `tar` sans copie en RAM
-- Checkboxes PixelIt — alignement texte corrigé
-
 
 ## [2.4.0] — 2026-04-16
 

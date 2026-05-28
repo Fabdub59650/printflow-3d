@@ -679,73 +679,88 @@ function setupRoutes(router) {
 
   // GET /api/backup/export-full — export complet BDD + bibliothèque + config en .tar.gz
   router.get('/export-full', async (req, res) => {
-    const { exec } = require('child_process');
-    const settings = await getBackupSettings();
-    const dbConf   = getDbConfig();
+    const fs      = require('fs');
+    const { spawn } = require('child_process');
+    const settings  = await getBackupSettings();
+    const dbConf    = getDbConfig();
 
     const now    = new Date();
     const stamp  = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const tmpDir = path.join(os.tmpdir(), 'printflow_export_' + stamp);
-    const outFile = path.join(os.tmpdir(), 'printflow_export_' + stamp + '.tar.gz');
+    const tmpDir = path.join('/tmp', 'pf_exp_' + stamp);
 
     try {
-      // Créer dossier temporaire
-      const fs = require('fs');
       fs.mkdirSync(tmpDir, { recursive: true });
 
-      // 1. Dump base de données
+      // 1. Dump BDD
+      const credsFile = path.join(tmpDir, '.my.cnf');
+      fs.writeFileSync(credsFile,
+        `[client]\nhost=${dbConf.host}\nuser=${dbConf.user}\npassword=${dbConf.pass}\n`,
+        { mode: 0o600 }
+      );
       const sqlFile = path.join(tmpDir, 'database.sql');
       await new Promise((resolve, reject) => {
-        const cmd = `mysqldump -h ${dbConf.host} -u ${dbConf.user} -p${dbConf.pass} ${dbConf.name} > "${sqlFile}"`;
-        exec(cmd, err => err ? reject(err) : resolve());
+        const dump = spawn('mysqldump', [
+          `--defaults-file=${credsFile}`, dbConf.name
+        ]);
+        const out = fs.createWriteStream(sqlFile);
+        dump.stdout.pipe(out);
+        dump.on('close', code => code === 0 ? resolve() : reject(new Error('mysqldump échoué: ' + code)));
+        dump.on('error', reject);
       });
+      try { fs.unlinkSync(credsFile); } catch(_) {}
 
-      // 2. Export config (settings depuis la BDD)
+      // 2. Config JSON
       const [settingRows] = await db.query('SELECT key_name, value FROM settings');
       const configObj = {};
       settingRows.forEach(r => {
-        // Ne pas exporter le mot de passe en clair
-        if (r.key_name !== 'auth_password') configObj[r.key_name] = r.value;
+        if (!['auth_password','backup_nas_password','telegram_token','vapid_private'].includes(r.key_name)) {
+          configObj[r.key_name] = r.value;
+        }
       });
       configObj._export_date    = now.toISOString();
-      configObj._export_version = '1.9.0';
+      configObj._export_version = '2.9.6';
       fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify(configObj, null, 2));
 
-      // 3. Copier la bibliothèque si elle existe
-      const libraryPath = settings.libraryPath || process.env.LIBRARY_PATH || '/opt/printflow/library';
-      let hasLibrary = false;
+      // 3. Construire la commande tar en streaming direct vers HTTP
+      const filename    = 'printflow_export_' + stamp + '.tar.gz';
+      const libraryPath = settings.libraryPath || '/opt/printflow/library';
+
+      // Construire les arguments tar
+      const tarArgs = ['-czf', '-', '-C', path.dirname(tmpDir), path.basename(tmpDir)];
       if (fs.existsSync(libraryPath)) {
-        await new Promise((resolve, reject) => {
-          exec(`cp -r "${libraryPath}" "${tmpDir}/library"`, err => err ? reject(err) : resolve());
-        });
-        hasLibrary = true;
+        tarArgs.push('-C', path.dirname(libraryPath));
+        tarArgs.push(path.basename(libraryPath));
       }
 
-      // 4. Créer l'archive .tar.gz
-      await new Promise((resolve, reject) => {
-        exec(`tar -czf "${outFile}" -C "${path.dirname(tmpDir)}" "${path.basename(tmpDir)}"`,
-          err => err ? reject(err) : resolve()
-        );
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'application/gzip');
+
+      const tar = spawn('tar', tarArgs, { maxBuffer: 512 * 1024 * 1024 });
+      tar.stdout.pipe(res);
+
+      tar.on('close', () => {
+        try { execSync(`rm -rf "${tmpDir}"`); } catch(_) {}
       });
 
-      // 5. Envoyer le fichier
-      const filename = 'printflow_export_' + stamp + '.tar.gz';
-      res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
-      res.setHeader('Content-Type', 'application/gzip');
-      const stream = fs.createReadStream(outFile);
-      stream.pipe(res);
-      stream.on('end', () => {
-        // Nettoyage
-        try { exec('rm -rf "' + tmpDir + '" "' + outFile + '"'); } catch(_) {}
+      tar.on('error', (e) => {
+        console.error('[Export] Erreur tar:', e.message);
+        try { execSync(`rm -rf "${tmpDir}"`); } catch(_) {}
+        if (!res.headersSent) res.status(500).json({ error: e.message });
       });
+
+      res.on('close', () => {
+        try { tar.kill(); } catch(_) {}
+        try { execSync(`rm -rf "${tmpDir}"`); } catch(_) {}
+      });
+
     } catch(e) {
-      console.error('[Export] Erreur :', e.message);
-      try { exec('rm -rf "' + tmpDir + '" "' + outFile + '"'); } catch(_) {}
+      try { execSync(`rm -rf "${tmpDir}"`); } catch(_) {}
+      console.error('[Export] Erreur:', e.message);
       if (!res.headersSent) res.status(500).json({ error: e.message });
     }
   });
 
-  // POST /api/backup/restore — restaurer depuis un fichier uploadé
+
   // POST /api/backup/restore — restaurer BDD depuis .sql ou export complet .tar.gz
   router.post('/restore', restoreUpload.single('backup'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Aucun fichier recu' });

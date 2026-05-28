@@ -100,8 +100,9 @@ app.use('/api/schedule',      require('./routes/schedule'));
 app.use('/api/spool-weights', require('./routes/spool-weights'));
 app.use('/api/updater',      require('./routes/updater'));
 app.use('/api/excel',        require('./routes/excel-export'));
-app.use('/api/logs',              require('./routes/logs'));
-app.use('/api/print-templates',  require('./routes/print-templates'));
+app.use('/api/logs',             require('./routes/logs'));
+app.use('/api/print-templates', require('./routes/print-templates'));
+app.use('/api/pixelit',         require('./routes/pixelit'));
 // Rapport hebdomadaire
 app.use('/api/report', require('./routes/report'));
 
@@ -162,6 +163,14 @@ app.listen(PORT, () => {
     catch(e) { console.warn('[NFC] Non disponible au démarrage:', e.message); }
   }, 3000);
   backupService.startBackup().catch(e => console.warn('[Backup] Erreur démarrage:', e.message));
+  // Démarrer la rotation PixelIt
+  setTimeout(async () => {
+    try {
+      const { startRotation } = require('./pixelit');
+      await startRotation();
+      console.log('[PixelIt] Rotation démarrée');
+    } catch(e) { console.warn('[PixelIt] Non disponible:', e.message); }
+  }, 5000);
 });
 
 // ── Démarrer le scheduler du rapport hebdomadaire ─────────────────────────

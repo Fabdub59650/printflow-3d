@@ -290,12 +290,26 @@ async function checkMoonrakerNotifications(printers) {
           }
         } catch(_) {}
         await notify('done', printData);
+        // PixelIt notification
+        try {
+          const pixelit = require('./pixelit');
+          await pixelit.notifyDone(
+            printData.name || 'Impression',
+            printData.actual_duration || 0,
+            printData.material || ''
+          );
+        } catch(_) {}
       } else if (prev === 'printing' && curr === 'error') {
         await notify('failed', {
           name:    status.filename || 'Impression',
           printer: printer.name,
           reason:  'Erreur Klipper',
         });
+        // PixelIt notification
+        try {
+          const pixelit = require('./pixelit');
+          await pixelit.notifyFailed(status.filename || 'Impression');
+        } catch(_) {}
       }
 
       _prevMoonrakerState[printer.id] = curr;

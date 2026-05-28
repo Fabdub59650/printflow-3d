@@ -27,9 +27,15 @@ router.get('/', async (req, res) => {
       GROUP BY month ORDER BY month DESC LIMIT 12`);
 
     const [byPrinter] = await db.query(`
-      SELECT p.id, p.name, p.total_prints, p.total_success,
-             p.total_hours, p.total_grams, p.status
-      FROM printers p ORDER BY p.total_prints DESC`);
+      SELECT p.id, p.name, p.status,
+             COUNT(pr.id)                                    AS total_prints,
+             SUM(pr.status='done')                          AS total_success,
+             ROUND(SUM(COALESCE(pr.actual_duration,0))/60,1) AS total_hours,
+             ROUND(SUM(COALESCE(pr.filament_used,0)),0)      AS total_grams
+      FROM printers p
+      LEFT JOIN prints pr ON pr.printer_id = p.id
+        AND pr.status IN ('done','failed','cancelled')
+      GROUP BY p.id ORDER BY total_prints DESC`);
 
     const [lowStock] = await db.query(`
       SELECT * FROM filaments
@@ -40,7 +46,12 @@ router.get('/', async (req, res) => {
     const [[filamentCount]] = await db.query('SELECT COUNT(*) as c FROM filaments WHERE archived=0');
 
     res.json({
-      totals: { ...totals, printer_count: printerCount.c, filament_count: filamentCount.c },
+      totals: {
+        ...totals,
+        total_hours:    Math.round((totals.total_minutes||0) / 60 * 10) / 10,
+        printer_count:  printerCount.c,
+        filament_count: filamentCount.c
+      },
       byMaterial,
       byMonth: byMonth.reverse(),
       byPrinter,

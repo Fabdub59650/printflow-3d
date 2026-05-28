@@ -25,10 +25,3 @@ Thumbs.db
 
 # Build
 dist/
-
-# Certificats et clés — ne jamais commiter
-*.crt
-*.pem
-*.key
-*.p12
-*.pfx

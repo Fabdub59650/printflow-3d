@@ -93,7 +93,7 @@ router.delete('/:id/photo', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const { status, printer_id, limit = 100 } = req.query;
+    const { status, printer_id, filament_id, limit = 100 } = req.query;
     let sql = `SELECT p.*, pr.name as printer_name, f.name as filament_name, f.color_hex, f.material,
                lo.name as library_object_name,
                lf.name as library_file_name
@@ -104,8 +104,14 @@ router.get('/', async (req, res) => {
                LEFT JOIN library_files lf ON p.library_file_id = lf.id
                WHERE 1=1`;
     const params = [];
-    if (status) { sql += ' AND p.status=?'; params.push(status); }
-    if (printer_id) { sql += ' AND p.printer_id=?'; params.push(printer_id); }
+    if (status)      { sql += ' AND p.status=?'; params.push(status); }
+    if (printer_id)  { sql += ' AND p.printer_id=?'; params.push(printer_id); }
+    if (filament_id) {
+      sql += ` AND (p.filament_id=? OR p.id IN (
+        SELECT print_id FROM print_filaments WHERE filament_id=?
+      ))`;
+      params.push(filament_id, filament_id);
+    }
     sql += ` ORDER BY p.created_at DESC LIMIT ${parseInt(limit)}`;
     const [rows] = await db.query(sql, params);
     // Enrichir chaque impression avec ses filaments multiples
@@ -149,6 +155,15 @@ router.get('/:id', async (req, res) => {
        WHERE pf.print_id=? ORDER BY pf.sort_order`, [print.id]
     );
     print.filaments = pf;
+
+    // Charger les fichiers associés
+    const [printFiles] = await db.query(
+      `SELECT pf.*, lf.name as library_file_name, lf.file_type, lf.source_url
+       FROM print_files pf
+       LEFT JOIN library_files lf ON lf.id = pf.library_file_id
+       WHERE pf.print_id=? ORDER BY pf.sort_order, pf.id`, [print.id]
+    );
+    print.print_files = printFiles;
 
     // Ajouter tarif électricité et prix/kg pour affichage du détail coût
     const [[elecRow]] = await db.query(
@@ -201,6 +216,19 @@ router.post('/', async (req, res) => {
       SELECT p.*, pr.name as printer_name, f.name as filament_name, f.color_hex
       FROM prints p LEFT JOIN printers pr ON p.printer_id=pr.id LEFT JOIN filaments f ON p.filament_id=f.id
       WHERE p.id=?`, [result.insertId]);
+    // Sauvegarder les fichiers associés si fournis
+    const printFilesPost = req.body.print_files;
+    if (Array.isArray(printFilesPost) && printFilesPost.length > 0) {
+      for (let i = 0; i < printFilesPost.length; i++) {
+        const pf = printFilesPost[i];
+        if (!pf.file_name) continue;
+        await db.query(
+          'INSERT INTO print_files (print_id, library_file_id, file_name, quantity, notes, sort_order) VALUES (?,?,?,?,?,?)',
+          [result.insertId, pf.library_file_id||null, pf.file_name, parseInt(pf.quantity)||1, pf.notes||null, i]
+        );
+      }
+    }
+
     // Sauvegarder les filaments multiples si fournis
     const filaments = req.body.filaments;
     if (Array.isArray(filaments) && filaments.length > 0) {
@@ -349,6 +377,20 @@ router.put('/:id', async (req, res) => {
       SELECT p.*, pr.name as printer_name, f.name as filament_name, f.color_hex
       FROM prints p LEFT JOIN printers pr ON p.printer_id=pr.id LEFT JOIN filaments f ON p.filament_id=f.id
       WHERE p.id=?`, [req.params.id]);
+    // Mettre à jour les fichiers associés si fournis
+    const printFilesPut = req.body.print_files;
+    if (Array.isArray(printFilesPut)) {
+      await db.query('DELETE FROM print_files WHERE print_id=?', [req.params.id]);
+      for (let i = 0; i < printFilesPut.length; i++) {
+        const pf = printFilesPut[i];
+        if (!pf.file_name) continue;
+        await db.query(
+          'INSERT INTO print_files (print_id, library_file_id, file_name, quantity, notes, sort_order) VALUES (?,?,?,?,?,?)',
+          [req.params.id, pf.library_file_id||null, pf.file_name, parseInt(pf.quantity)||1, pf.notes||null, i]
+        );
+      }
+    }
+
     // Mettre à jour les filaments multiples si fournis
     const filaments = req.body.filaments;
     if (Array.isArray(filaments)) {
