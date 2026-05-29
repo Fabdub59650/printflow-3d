@@ -158,6 +158,13 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`PrintFlow backend running on port ${PORT}`);
+  // Persister la version en base pour le système de mise à jour automatique
+  const db = require('./db');
+  const CURRENT_VERSION = '2.9.7';
+  db.query(
+    "INSERT INTO settings (key_name,value) VALUES ('_version',?) ON DUPLICATE KEY UPDATE value=?",
+    [CURRENT_VERSION, CURRENT_VERSION]
+  ).catch(e => console.warn('[Version] Impossible de persister la version:', e.message));
   setTimeout(() => {
     try { nfcService.startNFC(); }
     catch(e) { console.warn('[NFC] Non disponible au démarrage:', e.message); }
