@@ -1,5 +1,15 @@
 # Changelog PrintFlow-3D
 
+## [2.9.7] — 2026-05-29
+
+### Corrigé
+- **Tapo P100 — Contrôle local firmware 1.4+** : remplacement de l'approche cloud (`getCloudAndDevices` / `getTapoDevice`) par connexion directe locale via `loginDeviceByIp` (protocole KLAP)
+  - Nécessite l'option **"Third-Party Compatibility"** activée dans l'app Tapo → Moi → Third-Party Services
+  - Le test de connexion auto-assigne désormais le MAC depuis `getDeviceInfo()` sans sélection manuelle
+  - Fallback cloud conservé si la connexion locale échoue
+
+---
+
 ## [2.9.6] — 2026-05-28
 
 ### Améliorations infrastructure

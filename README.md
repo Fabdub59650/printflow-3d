@@ -2,7 +2,7 @@
 
 **Logiciel de gestion d'impressions 3D** — conçu pour tourner sur Raspberry Pi avec une interface web accessible depuis n'importe quel appareil du réseau local.
 
-![Version](https://img.shields.io/badge/version-2.9.6-blue)
+![Version](https://img.shields.io/badge/version-2.9.7-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
@@ -17,7 +17,7 @@
 - **Suivi temps réel Moonraker/Klipper** — températures buse/plateau, progression, temps restant
 - Accès direct aux interfaces web (Fluidd, Mainsail, OctoPrint)
 - Consommables avec alertes d'usure
-- Intégration prises connectées **TP-Link Tapo P100**
+- Intégration prises connectées **TP-Link Tapo P100** — contrôle local KLAP (firmware 1.4+ supporté)
 
 ### 📋 Impressions
 - Suivi complet avec statuts (Planifié, En attente, En cours, Terminé, Échec, Annulé)
