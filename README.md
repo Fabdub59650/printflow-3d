@@ -2,7 +2,7 @@
 
 **Logiciel de gestion d'impressions 3D** — conçu pour tourner sur Raspberry Pi avec une interface web accessible depuis n'importe quel appareil du réseau local.
 
-![Version](https://img.shields.io/badge/version-2.9.7-blue)
+![Version](https://img.shields.io/badge/version-2.9.8-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-red)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)

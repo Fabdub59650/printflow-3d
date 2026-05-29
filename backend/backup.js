@@ -718,7 +718,7 @@ function setupRoutes(router) {
         }
       });
       configObj._export_date    = now.toISOString();
-      configObj._export_version = '2.9.7';
+      configObj._export_version = '2.9.8';
       fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify(configObj, null, 2));
 
       // 3. Construire la commande tar en streaming direct vers HTTP

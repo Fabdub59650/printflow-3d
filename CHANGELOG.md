@@ -1,5 +1,12 @@
 # Changelog PrintFlow-3D
 
+## [2.9.8] — 2026-05-29
+
+### Corrigé
+- **Mise à jour automatique** : la version installée n'était pas persistée en base de données, l'updater comparait toujours avec `0.0.0` et proposait systématiquement une mise à jour — correction via `INSERT ON DUPLICATE KEY UPDATE` dans `server.js` au démarrage
+
+---
+
 ## [2.9.7] — 2026-05-29
 
 ### Corrigé
