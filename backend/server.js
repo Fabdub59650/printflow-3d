@@ -160,7 +160,10 @@ app.listen(PORT, () => {
   console.log(`PrintFlow backend running on port ${PORT}`);
   // Persister la version en base pour le système de mise à jour automatique
   const db = require('./db');
-  const CURRENT_VERSION = '2.9.8';
+  const CURRENT_VERSION = (() => {
+    try { return require('./package.json').version || '2.9.10'; }
+    catch(_) { return '2.9.10'; }
+  })();
   db.query(
     "INSERT INTO settings (key_name,value) VALUES ('_version',?) ON DUPLICATE KEY UPDATE value=?",
     [CURRENT_VERSION, CURRENT_VERSION]
