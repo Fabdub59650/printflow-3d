@@ -502,6 +502,22 @@
     <div class="printer-eta"></div>
   </div>
 
+  <!-- Imprimante 4 (C4L1) -->
+  <div class="card printer-card" id="printer-3" style="grid-column:4;grid-row:1">
+    <div class="card-title">Imprimante 4</div>
+    <div class="printer-header">
+      <div class="printer-name">—</div>
+      <div class="printer-badge badge-offline">Hors ligne</div>
+    </div>
+    <div class="printer-model"></div>
+    <div class="printer-temps"></div>
+    <div class="progress-wrap" style="display:none">
+      <div class="progress-fill" style="width:0%"></div>
+    </div>
+    <div class="printer-file"></div>
+    <div class="printer-eta"></div>
+  </div>
+
   <!-- Alertes (colonne droite sur 2 lignes) -->
   <div class="card" id="alerts-card">
     <div class="card-title">! Alertes</div>
@@ -907,22 +923,24 @@ async function kioskRefresh(manual) {
     _printers = printers;
 
     // Moonraker pour chaque imprimante compatible
-    const mrPromises = printers.slice(0,3).map(function(p) {
+    const mrPromises = printers.slice(0,4).map(function(p) {
       if (!['moonraker','fluidd','mainsail','klipper'].includes(p.interface_type)) return Promise.resolve(null);
       return apiGet('/moonraker/' + p.id + '/status').catch(function(){ return null; });
     });
     const mrData = await Promise.all(mrPromises);
 
-    // Rendu imprimantes (max 2 sur l'écran)
-    printers.slice(0,3).forEach(function(p, i) {
+    // Rendu imprimantes (max 4 sur l'écran)
+    printers.slice(0,4).forEach(function(p, i) {
       renderPrinter(i, p, mrData[i]);
     });
 
-    // Si 1 seule imprimante, cacher la 2ème card
+    // Masquer les cards inutilisées
     const card1 = document.getElementById('printer-1');
     const card2 = document.getElementById('printer-2');
+    const card3 = document.getElementById('printer-3');
     if (card1) card1.style.display = printers.length < 2 ? 'none' : '';
     if (card2) card2.style.display = printers.length < 3 ? 'none' : '';
+    if (card3) card3.style.display = printers.length < 4 ? 'none' : '';
 
     renderAlerts(stockAlerts, bobineAlerts, maintAlerts);
     renderStockPredict();
@@ -1692,10 +1710,10 @@ async function updateScreensaver() {
     const today = data.days[data.days.length - 1];
     if (statsEl && today) {
       statsEl.innerHTML =
-        (today.total > 0 ? '<span>\u2705 ' + today.success + '/' + today.total + ' impression' + (today.total>1?'s':'') + '</span>' : '<span>Aucune impression aujourd\'hui</span>') +
-        (today.hours > 0 ? '<span>\u23f1 ' + today.hours + 'h</span>' : '') +
-        (today.grams > 0 ? '<span>\U0001f9f5 ' + today.grams + 'g</span>' : '') +
-        (today.cost  > 0 ? '<span>\U0001f4b0 ' + today.cost.toFixed(2) + '\u20ac</span>' : '');
+        (today.total > 0 ? '<span style="color:#10b981">' + today.success + '/' + today.total + ' impr.</span>' : '<span>Aucune impression</span>') +
+        (today.hours > 0 ? '<span>' + today.hours + 'h</span>' : '') +
+        (today.grams > 0 ? '<span>' + today.grams + 'g</span>' : '') +
+        (today.cost  > 0 ? '<span style="color:#10b981">' + today.cost.toFixed(2) + '€</span>' : '');
     }
   } catch(_) {}
 }
