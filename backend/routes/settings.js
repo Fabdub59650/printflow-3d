@@ -8,9 +8,14 @@ router.get('/', async (req, res) => {
     const [rows] = await db.query('SELECT key_name, value FROM settings');
     const settings = {};
     rows.forEach(r => { settings[r.key_name] = r.value; });
-    // Informations de version (non stockées en base)
-    settings._version    = '2.9.8';
-    settings._build_date = '28/05/2026';
+    // Version — lue depuis la base (mise à jour par l'updater et server.js au démarrage)
+    if (!settings._version) {
+      try {
+        const path = require('path');
+        const pkg  = require(path.join('/opt/printflow', 'backend', 'package.json'));
+        settings._version = pkg.version || '2.9.10';
+      } catch(_) { settings._version = '2.9.10'; }
+    }
     res.json(settings);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
