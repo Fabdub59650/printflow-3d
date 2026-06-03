@@ -131,11 +131,22 @@ async function runUpdate(downloadUrl, version) {
     });
   }
 
-  // 7. Nettoyage
+  // 7. Mettre à jour la version en base
+  try {
+    await db.query(
+      "INSERT INTO settings (key_name, value) VALUES ('_version', ?) ON DUPLICATE KEY UPDATE value=?",
+      [version, version]
+    );
+    console.log('[Updater] Version mise à jour en base :', version);
+  } catch(e) {
+    console.error('[Updater] Impossible de mettre à jour la version en base :', e.message);
+  }
+
+  // 8. Nettoyage
   execSync('rm -rf ' + UPDATE_WORK);
   console.log('[Updater] Mise à jour v' + version + ' installée — redémarrage...');
 
-  // 8. Redémarrer le service
+  // 9. Redémarrer le service
   setTimeout(function() {
     exec('systemctl restart printflow', function(err) {
       if (err) console.error('[Updater] Erreur redémarrage :', err.message);
