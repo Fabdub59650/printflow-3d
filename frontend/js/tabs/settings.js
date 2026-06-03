@@ -535,6 +535,129 @@ async function renderSettings() {
 
     case 'integrations':
       el.innerHTML = `
+
+    <!-- ── PixelIt ──────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🟥 PixelIt — Matrice LED</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-sm" onclick="testPixelIt()">🔴 Tester</button>
+          <button class="btn btn-sm btn-primary" onclick="savePixelItConfig()">Enregistrer</button>
+        </div>
+      </div>
+
+      <!-- Connexion -->
+      <div class="form-grid" style="margin-bottom:12px">
+        <div class="form-group">
+          <label class="form-label">Activer PixelIt</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <div onclick="this.dataset.v=this.dataset.v==='1'?'0':'1';this.style.background=this.dataset.v==='1'?'var(--accent)':'var(--bg3)';document.getElementById('pi-enabled').value=this.dataset.v"
+                 id="pi-enabled-toggle" data-v="0"
+                 style="width:40px;height:22px;border-radius:11px;cursor:pointer;transition:background 0.2s;background:var(--bg3)">
+              <div style="width:18px;height:18px;border-radius:50%;background:#fff;margin:2px;transition:transform 0.2s"></div>
+            </div>
+            <input type="hidden" id="pi-enabled" value="0">
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Adresse IP</label>
+          <input id="pi-ip" placeholder="192.168.1.xxx" style="font-family:monospace">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Luminosité (%)</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="pi-brightness" min="0" max="100" value="60"
+                   oninput="document.getElementById('pi-brightness-val').textContent=this.value+'%'"
+                   style="flex:1">
+            <span id="pi-brightness-val" style="font-size:12px;color:var(--text3);width:35px">60%</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Couleur horloge</label>
+          <input type="color" id="pi-clock-color" value="#1E90FF" style="height:36px;width:100%;padding:2px 4px">
+        </div>
+      </div>
+
+      <!-- Rotation -->
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="font-weight:500;font-size:13px">Écrans en rotation</span>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="pi-rotation" checked style="width:15px;height:15px;flex-shrink:0">
+            <span>Activer la rotation</span>
+          </label>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px" id="pi-screens">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;background:var(--bg3);border-radius:var(--radius)">
+            <input type="checkbox" id="pi-screen-clock" checked style="width:15px;height:15px;flex-shrink:0">
+            <span style="flex:1;font-size:13px">🕐 Horloge</span>
+            <span style="font-size:12px;color:var(--text3)">durée</span>
+            <input type="number" id="pi-dur-clock" value="10" min="3" max="60" style="width:55px;font-size:12px">
+            <span style="font-size:12px;color:var(--text3)">s</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;background:var(--bg3);border-radius:var(--radius)">
+            <input type="checkbox" id="pi-screen-stats" checked style="width:15px;height:15px;flex-shrink:0">
+            <span style="flex:1;font-size:13px">📊 Stats du jour</span>
+            <span style="font-size:12px;color:var(--text3)">durée</span>
+            <input type="number" id="pi-dur-stats" value="8" min="3" max="60" style="width:55px;font-size:12px">
+            <span style="font-size:12px;color:var(--text3)">s</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;background:var(--bg3);border-radius:var(--radius)">
+            <input type="checkbox" id="pi-screen-weather" style="width:15px;height:15px;flex-shrink:0">
+            <span style="flex:1;font-size:13px">🌡 Météo</span>
+            <span style="font-size:12px;color:var(--text3)">durée</span>
+            <input type="number" id="pi-dur-weather" value="8" min="3" max="60" style="width:55px;font-size:12px">
+            <span style="font-size:12px;color:var(--text3)">s</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Météo -->
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px">
+        <span style="font-weight:500;font-size:13px">🌡 Météo (Open-Meteo, gratuit)</span>
+        <div class="form-grid" style="margin-top:8px">
+          <div class="form-group">
+            <label class="form-label">Ville</label>
+            <div style="display:flex;gap:6px">
+              <input id="pi-weather-city" placeholder="ex: Lille" style="flex:1">
+              <button class="btn btn-sm" onclick="searchWeatherCity()">🔍</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Latitude</label>
+            <input id="pi-weather-lat" placeholder="50.6292">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Longitude</label>
+            <input id="pi-weather-lon" placeholder="3.0573">
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications -->
+      <div style="border-top:1px solid var(--border);padding-top:12px">
+        <span style="font-weight:500;font-size:13px">Notifications prioritaires</span>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="pi-notif-done" checked style="width:15px;height:15px;flex-shrink:0">
+            <span>✅ Impression terminée</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="pi-notif-failed" checked style="width:15px;height:15px;flex-shrink:0">
+            <span>❌ Impression échouée</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="pi-notif-progress" checked style="width:15px;height:15px;flex-shrink:0">
+            <span>🖨 Progression (toutes les 30s via Moonraker)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="pi-notif-stock" style="width:15px;height:15px;flex-shrink:0">
+            <span>⚠ Stock filament critique</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Spoolman ───────────────────────────────── -->
     <div class="card">
       <div class="card-header">
@@ -816,6 +939,7 @@ async function renderSettings() {
       var haUrlEl   = document.getElementById('ha-example-url');
       if (apiBaseEl) apiBaseEl.textContent = window.location.origin + '/api';
       if (haUrlEl)   haUrlEl.textContent   = window.location.origin;
+      loadPixelItConfig();
       break;
 
     case 'imprimantes':
@@ -2202,6 +2326,10 @@ async function loadSystemHealth() {
       : h.disk_pct > 75 ? '#f59e0b'
       : 'var(--accent)';
 
+    const ssdColor = !h.ssd_pct ? 'var(--accent)'
+      : h.ssd_pct > 90 ? '#ef4444'
+      : h.ssd_pct > 75 ? '#f59e0b'
+      : 'var(--accent)';
     const memColor = !h.mem_pct ? 'var(--accent)'
       : h.mem_pct > 85 ? '#ef4444'
       : h.mem_pct > 70 ? '#f59e0b'
@@ -2250,7 +2378,20 @@ async function loadSystemHealth() {
         '<div style="font-size:11px;color:var(--text3);margin-top:3px">' + (h.disk_pct||0) + '% utilisé · ' + fmtBytes(h.disk_free) + ' libres' +
           (h.disk_pct > 90 ? ' <span style="color:#ef4444">⚠ Espace critique</span>' : '') +
         '</div>' +
-      '</div>';
+      '</div>' +
+      (h.ssd_total ? (
+      '<div class="stat-card">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+          '<span style="font-size:12px;color:var(--text3)">🗄️ SSD USB (/mnt/data)</span>' +
+          '<span style="font-size:13px;font-weight:600;color:' + ssdColor + '">' + fmtBytes(h.ssd_used) + ' / ' + fmtBytes(h.ssd_total) + '</span>' +
+        '</div>' +
+        bar(h.ssd_pct || 0, ssdColor) +
+        '<div style="font-size:11px;color:var(--text3);margin-top:3px">' + (h.ssd_pct||0) + '% utilisé · ' + fmtBytes(h.ssd_free) + ' libres' +
+          (h.ssd_pct > 90 ? ' <span style="color:#ef4444">⚠ Espace critique</span>' : '') +
+        '</div>' +
+      '</div>'
+      ) : '') +
+      '';
 
   } catch(e) {
     if (el) el.innerHTML = '<div style="color:var(--danger);font-size:13px">Erreur : ' + e.message + '</div>';
@@ -2509,4 +2650,106 @@ async function deletePrintTemplate(id) {
     toast('Modèle supprimé');
     loadPrintTemplates();
   });
+}
+
+// ── PixelIt ───────────────────────────────────────────────────────────────
+async function loadPixelItConfig() {
+  try {
+    const cfg = await API.get('/pixelit/config');
+
+    // Enabled toggle
+    const toggle = document.getElementById('pi-enabled-toggle');
+    const input  = document.getElementById('pi-enabled');
+    if (toggle && input) {
+      const enabled = cfg.enabled === 'true';
+      input.value = enabled ? '1' : '0';
+      toggle.dataset.v = enabled ? '1' : '0';
+      toggle.style.background = enabled ? 'var(--accent)' : 'var(--bg3)';
+      const dot = toggle.querySelector('div');
+      if (dot) dot.style.transform = enabled ? 'translateX(18px)' : '';
+    }
+
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+    const chk = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val !== 'false'; };
+
+    set('pi-ip',           cfg.ip || '');
+    set('pi-brightness',   cfg.brightness || '60');
+    set('pi-clock-color',  cfg.clock_color || '#1E90FF');
+    set('pi-weather-city', cfg.weather_city || '');
+    set('pi-weather-lat',  cfg.weather_lat || '');
+    set('pi-weather-lon',  cfg.weather_lon || '');
+    document.getElementById('pi-brightness-val').textContent = (cfg.brightness||60) + '%';
+
+    chk('pi-rotation',       cfg.rotation_enabled);
+    chk('pi-screen-clock',   cfg.screen_clock);
+    chk('pi-screen-stats',   cfg.screen_stats);
+    chk('pi-screen-weather', cfg.screen_weather);
+    chk('pi-notif-done',     cfg.notif_done);
+    chk('pi-notif-failed',   cfg.notif_failed);
+    chk('pi-notif-progress', cfg.notif_progress);
+    chk('pi-notif-stock',    cfg.notif_stock);
+
+    if (cfg.duration_clock)   document.getElementById('pi-dur-clock').value   = cfg.duration_clock;
+    if (cfg.duration_stats)   document.getElementById('pi-dur-stats').value   = cfg.duration_stats;
+    if (cfg.duration_weather) document.getElementById('pi-dur-weather').value = cfg.duration_weather;
+
+  } catch(e) { console.warn('[PixelIt] Erreur chargement config:', e.message); }
+}
+
+async function savePixelItConfig() {
+  const g = (id) => document.getElementById(id);
+  const gv = (id) => g(id)?.value || '';
+  const gc = (id) => g(id)?.checked ? 'true' : 'false';
+
+  const body = {
+    enabled:           gv('pi-enabled') === '1' ? 'true' : 'false',
+    ip:                gv('pi-ip'),
+    brightness:        gv('pi-brightness'),
+    clock_color:       gv('pi-clock-color'),
+    rotation_enabled:  gc('pi-rotation'),
+    screen_clock:      gc('pi-screen-clock'),
+    screen_stats:      gc('pi-screen-stats'),
+    screen_weather:    gc('pi-screen-weather'),
+    duration_clock:    gv('pi-dur-clock'),
+    duration_stats:    gv('pi-dur-stats'),
+    duration_weather:  gv('pi-dur-weather'),
+    notif_done:        gc('pi-notif-done'),
+    notif_failed:      gc('pi-notif-failed'),
+    notif_progress:    gc('pi-notif-progress'),
+    notif_stock:       gc('pi-notif-stock'),
+    weather_city:      gv('pi-weather-city'),
+    weather_lat:       gv('pi-weather-lat'),
+    weather_lon:       gv('pi-weather-lon'),
+  };
+
+  // Ordre de rotation selon les cases cochées
+  const order = ['clock','stats','weather'].filter(n => body['screen_'+n] === 'true');
+  body.rotation_order = order.join(',');
+
+  try {
+    await API.post('/pixelit/config', body);
+    toast('Configuration PixelIt enregistrée', 'success');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function testPixelIt() {
+  try {
+    await API.post('/pixelit/test', {});
+    toast('Écran de test envoyé au PixelIt', 'success');
+  } catch(e) { toast('PixelIt ne répond pas : ' + e.message, 'error'); }
+}
+
+async function searchWeatherCity() {
+  const city = document.getElementById('pi-weather-city')?.value?.trim();
+  if (!city) return toast('Entrez un nom de ville', 'error');
+  try {
+    const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=fr&format=json`);
+    const data = await resp.json();
+    if (!data.results?.length) return toast('Ville non trouvée', 'error');
+    const r = data.results[0];
+    document.getElementById('pi-weather-lat').value = r.latitude;
+    document.getElementById('pi-weather-lon').value = r.longitude;
+    document.getElementById('pi-weather-city').value = r.name + ', ' + r.country;
+    toast(`Coordonnées trouvées : ${r.latitude}, ${r.longitude}`, 'success');
+  } catch(e) { toast('Erreur recherche ville : ' + e.message, 'error'); }
 }

@@ -5,7 +5,18 @@ const db = require('../db');
 // GET all printers
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM printers ORDER BY name');
+    const [rows] = await db.query(`
+      SELECT p.*,
+             COUNT(pr.id)                                    AS total_prints,
+             SUM(pr.status='done')                          AS total_success,
+             ROUND(SUM(COALESCE(pr.actual_duration,0))/60,1) AS total_hours,
+             ROUND(SUM(COALESCE(pr.filament_used,0)),0)      AS total_grams
+      FROM printers p
+      LEFT JOIN prints pr ON pr.printer_id = p.id
+        AND pr.status IN ('done','failed','cancelled')
+      GROUP BY p.id
+      ORDER BY p.name
+    `);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

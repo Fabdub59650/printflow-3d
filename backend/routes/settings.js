@@ -9,8 +9,8 @@ router.get('/', async (req, res) => {
     const settings = {};
     rows.forEach(r => { settings[r.key_name] = r.value; });
     // Informations de version (non stockées en base)
-    settings._version    = '2.9.4';
-    settings._build_date = '05/05/2026';
+    settings._version    = '2.9.8';
+    settings._build_date = '28/05/2026';
     res.json(settings);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -94,7 +94,7 @@ router.get('/system-health', async (req, res) => {
       result.mem_pct   = total > 0 ? Math.round((total - avail) / total * 100) : 0;
     } catch(_) { result.mem_total = null; result.mem_used = null; result.mem_pct = null; }
 
-    // ── Espace disque ─────────────────────────────────────────────────────
+    // ── Espace disque (carte SD) ──────────────────────────────────────────
     try {
       const df = execSync('df -B1 / 2>/dev/null', { timeout: 3000 }).toString().split('\n')[1].split(/\s+/);
       result.disk_total = parseInt(df[1]);
@@ -102,6 +102,21 @@ router.get('/system-health', async (req, res) => {
       result.disk_free  = parseInt(df[3]);
       result.disk_pct   = parseInt(df[4]);
     } catch(_) { result.disk_total = null; result.disk_used = null; result.disk_free = null; result.disk_pct = null; }
+
+    // ── Espace SSD USB (/mnt/data) ────────────────────────────────────────
+    try {
+      const dfSSD = execSync('df -B1 /mnt/data 2>/dev/null', { timeout: 3000 }).toString().split('\n')[1];
+      if (dfSSD) {
+        const parts = dfSSD.split(/\s+/);
+        result.ssd_total = parseInt(parts[1]);
+        result.ssd_used  = parseInt(parts[2]);
+        result.ssd_free  = parseInt(parts[3]);
+        result.ssd_pct   = parseInt(parts[4]);
+        result.ssd_mount = '/mnt/data';
+      } else {
+        result.ssd_total = null; result.ssd_used = null; result.ssd_free = null; result.ssd_pct = null; result.ssd_mount = null;
+      }
+    } catch(_) { result.ssd_total = null; result.ssd_used = null; result.ssd_free = null; result.ssd_pct = null; result.ssd_mount = null; }
 
     // ── Uptime ────────────────────────────────────────────────────────────
     try {

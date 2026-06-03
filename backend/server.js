@@ -100,8 +100,9 @@ app.use('/api/schedule',      require('./routes/schedule'));
 app.use('/api/spool-weights', require('./routes/spool-weights'));
 app.use('/api/updater',      require('./routes/updater'));
 app.use('/api/excel',        require('./routes/excel-export'));
-app.use('/api/logs',              require('./routes/logs'));
-app.use('/api/print-templates',  require('./routes/print-templates'));
+app.use('/api/logs',             require('./routes/logs'));
+app.use('/api/print-templates', require('./routes/print-templates'));
+app.use('/api/pixelit',         require('./routes/pixelit'));
 // Rapport hebdomadaire
 app.use('/api/report', require('./routes/report'));
 
@@ -157,11 +158,26 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`PrintFlow backend running on port ${PORT}`);
+  // Persister la version en base pour le système de mise à jour automatique
+  const db = require('./db');
+  const CURRENT_VERSION = '2.9.8';
+  db.query(
+    "INSERT INTO settings (key_name,value) VALUES ('_version',?) ON DUPLICATE KEY UPDATE value=?",
+    [CURRENT_VERSION, CURRENT_VERSION]
+  ).catch(e => console.warn('[Version] Impossible de persister la version:', e.message));
   setTimeout(() => {
     try { nfcService.startNFC(); }
     catch(e) { console.warn('[NFC] Non disponible au démarrage:', e.message); }
   }, 3000);
   backupService.startBackup().catch(e => console.warn('[Backup] Erreur démarrage:', e.message));
+  // Démarrer la rotation PixelIt
+  setTimeout(async () => {
+    try {
+      const { startRotation } = require('./pixelit');
+      await startRotation();
+      console.log('[PixelIt] Rotation démarrée');
+    } catch(e) { console.warn('[PixelIt] Non disponible:', e.message); }
+  }, 5000);
 });
 
 // ── Démarrer le scheduler du rapport hebdomadaire ─────────────────────────

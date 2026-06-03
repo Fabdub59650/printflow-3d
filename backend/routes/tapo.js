@@ -1,9 +1,7 @@
 /**
  * tapo.js — Contrôle prises Tapo P100
- * Flux : cloudLogin -> listDevices -> getTapoDevice(deviceObject) -> turnOn/turnOff
- *
- * Note firmware 1.4.0+ : le protocole KLAP local est restreint aux apps officielles.
- * Le contrôle cloud fonctionne uniquement si les prises sont status=1 (online cloud).
+ * Flux : loginDeviceByIp (KLAP local) avec Third-Party Compatibility activée.
+ * Compatible firmware 1.4.0+ via option "Third-Party Compatibility" dans l'app Tapo.
  * Toggle d'activation dans Paramètres -> Intégrations -> Tapo.
  */
 
@@ -127,17 +125,13 @@ router.post('/:id/tapo', async (req, res) => {
     if (!printer.tapo_mac) return res.status(400).json({ error: 'Prise non associee' });
     if (!tapoLib)          return res.status(503).json({ error: 'Module non installe' });
     try {
-      const { cloud, devices } = await getCloudAndDevices();
-      const deviceObj = devices[printer.tapo_mac];
-      if (!deviceObj) throw new Error('Prise introuvable dans le compte Tapo (MAC: ' + printer.tapo_mac + ')');
-      const device = await cloud.getTapoDevice(deviceObj);
+      const device = await tapoLib.loginDeviceByIp(creds.email, creds.password, printer.tapo_ip);
       const currentOn   = printer.tapo_state === 1;
       const targetState = action === 'toggle' ? !currentOn : action === 'on';
       if (targetState) { await device.turnOn(); } else { await device.turnOff(); }
       await db.query('UPDATE printers SET tapo_state=? WHERE id=?', [targetState ? 1 : 0, req.params.id]);
       res.json({ ok: true, on: targetState, printer: printer.name });
     } catch(e) {
-      if (e.message.includes('401') || e.message.includes('login')) invalidateCloud();
       res.status(500).json({ error: 'Erreur prise : ' + e.message });
     }
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -153,15 +147,38 @@ router.post('/:id/tapo/test', async (req, res) => {
     if (!creds.email || !creds.password) return res.status(400).json({
       error: 'Identifiants Tapo non configures. Parametres -> Integrations -> Tapo.'
     });
-    invalidateCloud();
-    const { devices } = await getCloudAndDevices();
-    const tapoPluqs = Object.values(devices).filter(d => d.deviceType === 'SMART.TAPOPLUG');
-    if (tapoPluqs.length === 0)
-      return res.status(404).json({ error: 'Aucune prise Tapo trouvee sur ce compte' });
-    res.json({
-      ok: true, needSelection: true,
-      devices: tapoPluqs.map(d => ({ alias: d.alias, mac: d.deviceMac, model: d.deviceModel, status: d.status }))
-    });
+    // Test connexion directe par IP via KLAP (firmware 1.4+ avec Third-Party Compatibility)
+    try {
+      const device = await tapoLib.loginDeviceByIp(creds.email, creds.password, ip);
+      const info = await device.getDeviceInfo();
+      // Récupérer le MAC depuis getDeviceInfo
+      const mac = (info.mac || '').replace(/:/g,'').toUpperCase() ||
+                  (info.device_id || '').toUpperCase().slice(-12);
+      if (mac) {
+        await db.query('UPDATE printers SET tapo_mac=?, tapo_ip=?, tapo_state=? WHERE id=?',
+          [mac, ip, info.device_on ? 1 : 0, req.params.id]);
+      }
+      res.json({
+        ok: true,
+        needSelection: false,
+        alias: info.nickname || info.alias || ip,
+        mac,
+        model: info.model || 'P100',
+        on: !!info.device_on,
+        autoAssigned: !!mac
+      });
+    } catch(eLocal) {
+      // Fallback cloud si loginDeviceByIp échoue
+      invalidateCloud();
+      const { devices } = await getCloudAndDevices();
+      const tapoPluqs = Object.values(devices).filter(d => d.deviceType === 'SMART.TAPOPLUG');
+      if (tapoPluqs.length === 0)
+        return res.status(404).json({ error: 'Aucune prise Tapo trouvee sur ce compte' });
+      res.json({
+        ok: true, needSelection: true,
+        devices: tapoPluqs.map(d => ({ alias: d.alias, mac: d.deviceMac, model: d.deviceModel, status: d.status }))
+      });
+    }
   } catch(e) { res.status(500).json({ error: 'Erreur : ' + e.message }); }
 });
 

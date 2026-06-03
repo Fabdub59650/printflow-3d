@@ -550,13 +550,15 @@ async function renderStatsPrints() {
 }
 
 // ── Stats coûts filament + électricité ─────────────────────────────────────
-async function renderStatsCosts() {
+async function renderStatsCosts(days) {
   const content = document.getElementById('content');
   content.innerHTML = '<div style="color:var(--text3);padding:20px 0">Chargement…</div>';
 
   // Sélecteur de période
-  const existingDays = document.getElementById('costs-days-select');
-  const days = existingDays ? existingDays.value : '30';
+  if (!days) {
+    const existingDays = document.getElementById('costs-days-select');
+    days = existingDays ? existingDays.value : '30';
+  }
 
   let data;
   try { data = await API.get('/stats/costs?days=' + days); }
@@ -567,7 +569,7 @@ async function renderStatsCosts() {
 
   // Prix kWh configurable
   let html = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">' +
-    '<select id="costs-days-select" onchange="renderStatsCosts()" style="font-size:12px">' +
+    '<select id="costs-days-select" onchange="renderStatsCosts(this.value)" style="font-size:12px">' +
       '<option value="7"'  + (days==='7'  ?' selected':'') + '>7 jours</option>' +
       '<option value="30"' + (days==='30' ?' selected':'') + '>30 jours</option>' +
       '<option value="90"' + (days==='90' ?' selected':'') + '>90 jours</option>' +
@@ -2049,3 +2051,4 @@ async function renderStatsStockPrediction(days) {
     content.innerHTML = '<div style="color:var(--danger)">' + e.message + '</div>';
   }
 }
+

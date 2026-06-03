@@ -193,6 +193,11 @@ async function renderDashboard() {
         <div class="metric-sub">réussite : ${s.total_prints ? Math.round((s.success/s.total_prints)*100) : 0}%</div>
       </div>
       <div class="metric-card">
+        <div class="metric-label">Heures d'impression</div>
+        <div class="metric-value">${s.total_hours || 0}<span style="font-size:14px;color:var(--text2)">h</span></div>
+        <div class="metric-sub">${s.total_grams ? Math.round(s.total_grams)+'g filament' : 'aucun filament'}</div>
+      </div>
+      <div class="metric-card">
         <div class="metric-label">Stock faible</div>
         <div class="metric-value" style="color:${lowStock.length > 0 ? 'var(--warning)' : 'var(--text)'}">${lowStock.length}</div>
         <div class="metric-sub">bobine${lowStock.length > 1 ? 's' : ''} sous 20%</div>

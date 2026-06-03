@@ -391,84 +391,119 @@ async function openPrintDetail(id) {
     '</div>' +
   '</div>';
 
+  // ── Nouvelle fiche organisée ──────────────────────────────────────────────
+  const hasRealCost2 = p.real_cost !== null && p.real_cost !== undefined;
+  const canCalc2     = p.filament_used || p.actual_duration;
+  const rc2  = hasRealCost2 ? parseFloat(p.real_cost) : null;
+  const rfc2 = hasRealCost2 ? parseFloat(p.real_filament_cost||0) : null;
+  const rec2 = hasRealCost2 ? parseFloat(p.real_electricity_cost||0) : null;
+
   openModal(
-    photoHtml +
-    costHtml +
-    '<div class="grid-2" style="margin-bottom:14px">' +
+    // ── En-tête : photo + note + statut ──
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">' +
+      // Photo
       '<div>' +
-        '<div class="stat-row"><span class="stat-label">Imprimante</span><span class="stat-val">' + (p.printer_name||'—') + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Filament(s)</span><span class="stat-val">' + renderFilamentDetail(p) + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Fichier</span><span class="stat-val" style="font-size:12px">' + (p.file_name||'—') + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Statut</span><span class="stat-val">' + statusBadge(p.status) + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Progression</span><span class="stat-val">' + (p.progress||0) + '%</span></div>' +
-        (p.library_object_name ? '<div class="stat-row"><span class="stat-label">📚 Bibliothèque</span><span class="stat-val">' +
-          '<a href="#" onclick="closeModal();switchTab(\'library\',document.querySelector(\'[data-tab=library]\'))" ' +
-          'style="color:var(--accent);text-decoration:none">' + p.library_object_name + '</a>' +
-          (p.library_file_name ? '<br><span style="font-size:11px;color:var(--text3)">' + p.library_file_name + '</span>' : '') +
-          '</span></div>' : '') +
+        '<div style="background:var(--bg3);border-radius:var(--radius);overflow:hidden;margin-bottom:6px">' +
+          (p.photo_path
+            ? '<div style="position:relative">' +
+                '<img src="/api/prints/' + p.id + '/photo?t=' + Date.now() + '" ' +
+                'style="width:100%;height:140px;object-fit:cover;display:block">' +
+                '<button class="btn btn-sm btn-danger" style="position:absolute;top:4px;right:4px;opacity:0.85" ' +
+                'onclick="deletePrintPhoto(' + p.id + ')">✕</button>' +
+              '</div>'
+            : '<div style="height:80px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px">Aucune photo</div>') +
+        '</div>' +
+        '<label class="btn btn-sm" style="cursor:pointer;font-size:11px;width:100%;justify-content:center;display:flex">' +
+          '📷 ' + (p.photo_path ? 'Remplacer' : 'Ajouter une photo') +
+          '<input type="file" accept="image/*" capture="environment" style="display:none" onchange="uploadPrintPhoto(' + p.id + ',this)">' +
+        '</label>' +
       '</div>' +
-      '<div>' +
+      // Note + statut + dates
+      '<div style="display:flex;flex-direction:column;gap:8px">' +
+        '<div>' +
+          '<div class="form-label" style="margin-bottom:4px">Note</div>' +
+          renderStarsEditable(p.rating, p.id) +
+        '</div>' +
+        '<div class="stat-row"><span class="stat-label">Statut</span>' + statusBadge(p.status) + '</div>' +
+        (p.progress ? '<div class="stat-row"><span class="stat-label">Progression</span><span class="stat-val">' + p.progress + '%</span></div>' : '') +
+        (p.library_object_name
+          ? '<div class="stat-row"><span class="stat-label">📚</span>' +
+            '<a href="#" onclick="closeModal();switchTab(\'library\',document.querySelector(\'[data-tab=library]\'))" ' +
+            'style="color:var(--accent);text-decoration:none;font-size:13px">' + p.library_object_name + '</a></div>'
+          : '') +
+        '<div style="font-size:11px;color:var(--text3);margin-top:auto">' +
+          (p.started_at  ? 'Début : ' + fmtDateTime(p.started_at)  + '<br>' : '') +
+          (p.finished_at ? 'Fin : '   + fmtDateTime(p.finished_at) : '') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    // ── Section Matériel ──
+    '<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:10px">' +
+      '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Matériel</div>' +
+      '<div class="stat-row"><span class="stat-label">Imprimante</span><span class="stat-val">' + (p.printer_name||'—') + '</span></div>' +
+      '<div class="stat-row" style="align-items:flex-start"><span class="stat-label">Filament(s)</span><span class="stat-val">' + renderFilamentDetail(p) + '</span></div>' +
+      (p.print_files && p.print_files.length > 0
+        ? '<div class="stat-row" style="align-items:flex-start"><span class="stat-label">Fichiers</span>' +
+          '<div style="display:flex;flex-direction:column;gap:2px">' +
+          p.print_files.map(function(f) {
+            return '<span style="font-size:12px">' + f.file_name +
+              (f.quantity > 1 ? ' <span style="color:var(--accent);font-weight:600">×' + f.quantity + '</span>' : '') +
+            '</span>';
+          }).join('') + '</div></div>'
+        : (p.file_name ? '<div class="stat-row"><span class="stat-label">Fichier</span><span class="stat-val" style="font-size:12px">' + p.file_name + '</span></div>' : '')) +
+    '</div>' +
+
+    // ── Section Temps & Paramètres ──
+    '<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:10px">' +
+      '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Temps & Paramètres</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">' +
         '<div class="stat-row"><span class="stat-label">Durée estimée</span><span class="stat-val">' + fmtDuration(p.estimated_duration) + '</span></div>' +
         '<div class="stat-row"><span class="stat-label">Durée réelle</span><span class="stat-val">' + fmtDuration(p.actual_duration) + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Filament consommé</span><span class="stat-val">' + (p.filament_used ? p.filament_used+'g' : '—') + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Hauteur couche</span><span class="stat-val">' + (p.layer_height ? p.layer_height+'mm' : '—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Consommé</span><span class="stat-val">' + (p.filament_used ? p.filament_used+'g' : '—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Couche</span><span class="stat-val">' + (p.layer_height ? p.layer_height+'mm' : '—') + '</span></div>' +
         '<div class="stat-row"><span class="stat-label">Remplissage</span><span class="stat-val">' + (p.infill_percent ? p.infill_percent+'%' : '—') + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Temp. buse</span><span class="stat-val">' + (p.print_temp ? p.print_temp+'°C' : '—') + '</span></div>' +
-        '<div class="stat-row"><span class="stat-label">Temp. plateau</span><span class="stat-val">' + (p.bed_temp ? p.bed_temp+'°C' : '—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Vitesse</span><span class="stat-val">' + (p.print_speed ? p.print_speed+'mm/s' : '—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Buse</span><span class="stat-val">' + (p.print_temp ? p.print_temp+'°C' : '—') + '</span></div>' +
+        '<div class="stat-row"><span class="stat-label">Plateau</span><span class="stat-val">' + (p.bed_temp ? p.bed_temp+'°C' : '—') + '</span></div>' +
       '</div>' +
     '</div>' +
 
-    // ── Coût réel ──────────────────────────────────────────────────────────
-    (p.status === 'done' ? (function() {
-      const hasRealCost = p.real_cost !== null && p.real_cost !== undefined;
-      const canCalc     = p.filament_used || p.actual_duration;
-      const rc  = hasRealCost ? parseFloat(p.real_cost) : null;
-      const rfc = hasRealCost ? parseFloat(p.real_filament_cost || 0) : null;
-      const rec = hasRealCost ? parseFloat(p.real_electricity_cost || 0) : null;
-
-      return '<div style="background:var(--bg3);border-radius:var(--radius);padding:14px;margin-bottom:12px">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
-          '<div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em">Coût réel</div>' +
-          (canCalc ? '<button class="btn btn-sm" onclick="recalcPrintCost(' + p.id + ')" id="btn-recalc-' + p.id + '">Recalculer</button>' : '') +
+    // ── Section Coût réel ──
+    (p.status === 'done' ?
+      '<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:10px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+          '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Coût réel</div>' +
+          (canCalc2 ? '<button class="btn btn-sm" onclick="recalcPrintCost(' + p.id + ')" id="btn-recalc-' + p.id + '">Recalculer</button>' : '') +
         '</div>' +
-        (hasRealCost ? (
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">' +
-            costBox('Matière',     rfc !== null ? rfc.toFixed(3) + ' €' : '—', '#3b82f6') +
-            costBox('Électricité', rec !== null ? rec.toFixed(3) + ' €' : '—', '#8b5cf6') +
-            costBox('Total réel',  rc  !== null ? rc.toFixed(2)  + ' €' : '—', '#10b981') +
-          '</div>' +
-          // Détail du calcul
-          '<div style="font-size:11px;color:var(--text3);border-top:1px solid var(--border);padding-top:8px;display:flex;flex-wrap:wrap;gap:8px">' +
-            (p.filament_used && p.price_per_kg
-              ? '<span>🧵 ' + Math.round(p.filament_used) + 'g × ' + parseFloat(p.price_per_kg).toFixed(2) + '€/kg</span>'
-              : (p.filament_used ? '<span>🧵 ' + Math.round(p.filament_used) + 'g consommés</span>' : '')) +
-            (p.actual_duration && p.electricity_rate
-              ? '<span>⚡ ' + p.actual_duration + 'min × ' + parseFloat(p.electricity_rate).toFixed(4) + '€/min</span>'
-              : (p.actual_duration ? '<span>⏱ ' + p.actual_duration + 'min</span>' : '')) +
-            (rc && p.actual_duration && p.actual_duration > 0
-              ? '<span>📊 ' + (rc / p.actual_duration * 60).toFixed(3) + '€/h</span>'
-              : '') +
-          '</div>'
-        ) : (
-          canCalc
-            ? '<div style="font-size:13px;color:var(--text3);text-align:center;padding:8px 0">' +
-                'Coût non calculé — <a href="#" onclick="recalcPrintCost(' + p.id + ');return false" style="color:var(--accent)">Calculer maintenant</a>' +
-              '</div>'
-            : '<div style="font-size:13px;color:var(--text3);text-align:center;padding:8px 0">' +
-                'Renseignez le filament consommé et la durée réelle pour calculer le coût.' +
-              '</div>'
-        )) +
-      '</div>';
-    })() : '') +
-    (p.notes ? '<div style="margin-bottom:12px"><div class="form-label" style="margin-bottom:6px">Notes</div><div style="font-size:13px;color:var(--text2);background:var(--bg3);padding:10px;border-radius:var(--radius)">' + p.notes + '</div></div>' : '') +
-    '<div style="margin-bottom:12px;display:flex;align-items:center;gap:10px">' +
-      '<div class="form-label" style="margin:0">Note</div>' +
-      renderStarsEditable(p.rating, p.id) +
-    '</div>' +
-    '<div style="font-size:12px;color:var(--text3);margin-bottom:4px">' +
-      'Créée : ' + fmtDateTime(p.created_at) + ' · ' +
-      'Débutée : ' + fmtDateTime(p.started_at) + ' · ' +
-      'Terminée : ' + fmtDateTime(p.finished_at) +
+        (hasRealCost2
+          ? '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">' +
+              costBox('Matière',     rfc2 !== null ? rfc2.toFixed(3)+'€' : '—', '#3b82f6') +
+              costBox('Electricité', rec2 !== null ? rec2.toFixed(3)+'€' : '—', '#8b5cf6') +
+              costBox('Total',       rc2  !== null ? rc2.toFixed(2) +'€' : '—', '#10b981') +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--text3);display:flex;flex-wrap:wrap;gap:8px;padding-top:6px;border-top:1px solid var(--border)">' +
+              (p.filament_used && p.price_per_kg ? '<span>' + Math.round(p.filament_used) + 'g x ' + parseFloat(p.price_per_kg).toFixed(2) + 'EUR/kg</span>' : '') +
+              (p.actual_duration && p.electricity_rate ? '<span>' + p.actual_duration + 'min x ' + parseFloat(p.electricity_rate).toFixed(4) + 'EUR/min</span>' : '') +
+              (rc2 && p.actual_duration > 0 ? '<span>' + (rc2/p.actual_duration*60).toFixed(3) + 'EUR/h</span>' : '') +
+            '</div>'
+          : '<div style="font-size:13px;color:var(--text3);text-align:center;padding:8px 0">' +
+              (canCalc2
+                ? 'Non calculé — <a href="#" onclick="recalcPrintCost(' + p.id + ');return false" style="color:var(--accent)">Calculer</a>'
+                : 'Renseignez filament consommé et durée réelle.') +
+            '</div>') +
+      '</div>'
+    : '') +
+    (p.notes
+      ? '<div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:10px">' +
+          '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Notes</div>' +
+          '<div style="font-size:13px;color:var(--text2);background:var(--bg3);padding:10px;border-radius:var(--radius)">' + p.notes + '</div>' +
+        '</div>'
+      : '') +
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">' +
+      'Créée : ' + fmtDateTime(p.created_at) +
+      (p.started_at  ? '  ·  Début : ' + fmtDateTime(p.started_at)  : '') +
+      (p.finished_at ? '  ·  Fin : '   + fmtDateTime(p.finished_at) : '') +
     '</div>' +
     '<div class="modal-footer">' +
       '<button class="btn" onclick="closeModal()">Fermer</button>' +
@@ -590,7 +625,7 @@ async function openPrintForm(id = null, prefillProjectId = null, defaultStatus =
     API.get('/library/objects').catch(() => []),
     API.get('/print-templates').catch(() => []),
   ]);
-  const p = id ? allPrints.find(x => x.id === id) || await API.get('/prints/' + id) : {};
+  const p = id ? await API.get('/prints/' + id) : {};
   if (!id && defaultStatus) p.status = defaultStatus;
   if (isDuplicate && window._duplicateSource) {
     Object.assign(p, window._duplicateSource);
@@ -600,61 +635,86 @@ async function openPrintForm(id = null, prefillProjectId = null, defaultStatus =
   const selectedObject  = p.library_object_id || '';
 
   openModal(`
-    <!-- ── Modèle d'impression ───────────────────────────── -->
+    <!-- ── Modèle ───────────────────────────────────────── -->
     ${!id && templates.length ? `
-    <div style="margin-bottom:12px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:8px">
-        <label class="form-label" style="margin:0;flex-shrink:0">📋 Modèle :</label>
-        <select id="prf-template" onchange="applyPrintTemplate(this.value)" style="flex:1;font-size:12px">
-          <option value="">— Choisir un modèle —</option>
-          ${templates.map(t => `<option value="${t.id}"
-            data-nozzle="${t.temp_nozzle||''}"
-            data-bed="${t.temp_bed||''}"
-            data-layer="${t.layer_height||''}"
-            data-infill="${t.infill_percent||''}"
-            data-speed="${t.print_speed||''}"
-            data-supports="${t.supports||0}"
-            data-material="${t.material||''}"
-            data-notes="${(t.notes||'').replace(/"/g,'&quot;')}"
-          >${t.name}${t.material?' ('+t.material+')':''}</option>`).join('')}
-        </select>
-      </div>
+    <div style="margin-bottom:12px;padding:8px 12px;background:var(--bg3);border-radius:var(--radius);border:1px solid var(--border);display:flex;align-items:center;gap:8px">
+      <label class="form-label" style="margin:0;flex-shrink:0;font-size:11px">📋 MODÈLE</label>
+      <select id="prf-template" onchange="applyPrintTemplate(this.value)" style="flex:1;font-size:12px">
+        <option value="">— Choisir un modèle —</option>
+        ${templates.map(t => `<option value="${t.id}"
+          data-nozzle="${t.temp_nozzle||''}" data-bed="${t.temp_bed||''}"
+          data-layer="${t.layer_height||''}" data-infill="${t.infill_percent||''}"
+          data-speed="${t.print_speed||''}" data-supports="${t.supports||0}"
+          data-material="${t.material||''}" data-notes="${(t.notes||'').replace(/"/g,'&quot;')}"
+        >${t.name}${t.material?' ('+t.material+')':''}</option>`).join('')}
+      </select>
     </div>` : ''}
-    <!-- ── Identification ───────────────────────────────── -->
-    <div style="margin-bottom:12px">
-      <label class="form-label">Nom *</label>
-      <input id="prf-name" value="${p.name||''}" placeholder="Nom de l'impression">
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-      ${window._projectsEnabled ? `
+
+    <!-- ── Ligne 1 : Identification + Suivi ─────────────── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+
+      <!-- Colonne Identification -->
       <div>
-        <label class="form-label">Projet</label>
-        <select id="prf-project">
-          <option value="">— Aucun —</option>
-          ${projects.map(pj => `<option value="${pj.id}" ${selectedProject==pj.id?'selected':''}>${pj.code} — ${pj.name}</option>`).join('')}
-        </select>
+        <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Identification</div>
+        <div style="margin-bottom:8px">
+          <label class="form-label">Nom *</label>
+          <input id="prf-name" value="${p.name||''}" placeholder="Nom de l'impression">
+        </div>
+        ${window._projectsEnabled ? `
+        <div style="margin-bottom:8px">
+          <label class="form-label">Projet</label>
+          <select id="prf-project">
+            <option value="">— Aucun —</option>
+            ${projects.map(pj => `<option value="${pj.id}" ${selectedProject==pj.id?'selected':''}>${pj.code} — ${pj.name}</option>`).join('')}
+          </select>
+        </div>
+        <div style="margin-bottom:8px">
+          <label class="form-label">Pièce dans le projet</label>
+          <input id="prf-item-name" value="${p.project_item_name||''}" placeholder="ex: Couvercle…">
+        </div>` : ''}
+        ${selectedObject ? `<div style="font-size:12px;color:var(--text3);padding:4px 8px;background:var(--bg3);border-radius:var(--radius);margin-bottom:6px">
+          🔗 <strong style="color:var(--text2)">${libraryObjects.find(o=>o.id==selectedObject)?.name||'Objet bibliothèque'}</strong>
+          <span style="margin-left:6px;cursor:pointer;color:var(--danger)" onclick="document.getElementById('prf-library-object-hidden').value='';document.getElementById('prf-library-file-hidden').value='';this.closest('div').remove()">✕</span>
+        </div>` : ''}
+        <input type="hidden" id="prf-library-object-hidden" value="${selectedObject||''}">
+        <input type="hidden" id="prf-library-file-hidden" value="${p.library_file_id||''}">
       </div>
+
+      <!-- Colonne Suivi -->
       <div>
-        <label class="form-label">Pièce dans le projet</label>
-        <input id="prf-item-name" value="${p.project_item_name||''}" placeholder="ex: Couvercle…">
-      </div>` : ''}
-      <div>
-        <label class="form-label">Objet bibliothèque</label>
-        <select id="prf-library-object" onchange="onLibraryObjectChange(this)">
-          <option value="">— Aucun lien —</option>
-          ${libraryObjects.map(o => `<option value="${o.id}" ${selectedObject==o.id?'selected':''}>${o.name}</option>`).join('')}
-        </select>
-      </div>
-      <div id="prf-library-file-wrap" style="${selectedObject?'':'visibility:hidden'}">
-        <label class="form-label">Fichier utilisé</label>
-        <select id="prf-library-file">
-          <option value="">— Sélectionner —</option>
-        </select>
+        <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Suivi</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label class="form-label">Statut</label>
+            <select id="prf-status" onchange="togglePlannedAt(this.value)">
+              ${['planned','queued','printing','paused','done','failed','cancelled'].map(s =>
+                `<option value="${s}" ${(p.status||'queued')==s?'selected':''}>${statusBadge(s).replace(/<[^>]+>/g,'').trim()}</option>`).join('')}
+            </select>
+          </div>
+          <div id="prf-planned-at-wrap" style="display:${(p.status==='planned')?'block':'none'}">
+            <label class="form-label">Date planifiée</label>
+            <input id="prf-planned-at" type="date" value="${p.planned_at ? p.planned_at.slice(0,10) : ''}">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div>
+            <label class="form-label">Progression %</label>
+            <input id="prf-progress" type="number" min="0" max="100" value="${p.progress||0}">
+          </div>
+          <div>
+            <label class="form-label">Durée est. (min)</label>
+            <input id="prf-edur" type="number" value="${p.estimated_duration||''}">
+          </div>
+          <div>
+            <label class="form-label">Durée réelle (min)</label>
+            <input id="prf-adur" type="number" value="${p.actual_duration||''}">
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- ── Matériel ──────────────────────────────────────── -->
-    <div style="border-top:0.5px solid var(--border2);padding-top:12px;margin-bottom:12px">
+    <div style="border-top:0.5px solid var(--border2);padding-top:10px;margin-bottom:10px">
       <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Matériel</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
@@ -671,88 +731,83 @@ async function openPrintForm(id = null, prefillProjectId = null, defaultStatus =
       </div>
     </div>
 
-    <!-- ── Filaments ─────────────────────────────────────── -->
-    <div style="border-top:0.5px solid var(--border2);padding-top:12px;margin-bottom:12px">
+    <!-- ── Fichiers à imprimer ───────────────────────────── -->
+    <div style="border-top:0.5px solid var(--border2);padding-top:10px;margin-bottom:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase">Filaments</div>
+        <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="togglePrintFilesList()">
+          <span id="pfl-toggle-icon" style="font-size:12px;color:var(--text3)">${(p.print_files||[]).length > 3 ? '▶' : '▼'}</span>
+          <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase">Fichiers à imprimer</div>
+          <span id="pfl-count" style="font-size:11px;color:var(--text3);background:var(--bg3);padding:1px 6px;border-radius:10px">${(p.print_files||[]).length || 0}</span>
+        </div>
         <div style="display:flex;gap:6px">
-          <button type="button" class="btn btn-sm" style="font-size:11px"
-            onclick="nfcWaitForFilament(function(f){ addFilamentRow(f.id, f.name, f.color_hex); })">📡 NFC</button>
-          <button type="button" class="btn btn-sm" onclick="addFilamentRow()">+ Filament</button>
+          <button type="button" class="btn btn-sm" style="font-size:11px" onclick="openLibraryObjectPicker()">📦 Bibliothèque</button>
+          <button type="button" class="btn btn-sm" style="font-size:11px" onclick="addPrintFileRow()">+ Ajouter</button>
         </div>
       </div>
-      <div id="prf-filaments-list" style="display:flex;flex-direction:column;gap:6px"></div>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
-        <span style="font-size:11px;color:var(--text3)">Total consommé :</span>
-        <input id="prf-grams" type="number" step="0.1" readonly
-               style="width:80px;background:var(--bg3);color:var(--text3);cursor:not-allowed;font-weight:500"
-               value="${p.filament_used||''}">
-        <span style="font-size:11px;color:var(--text3)">g (auto)</span>
+      <div id="print-files-list" style="display:flex;flex-direction:column;gap:4px;${(p.print_files||[]).length > 3 ? 'display:none' : ''}">
+        ${(p.print_files||[]).map(function(f,i) { return printFileRowHtml(f, i); }).join('')}
       </div>
     </div>
 
-    <!-- ── Suivi ─────────────────────────────────────────── -->
-    <div style="border-top:0.5px solid var(--border2);padding-top:12px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Suivi</div>
-      <!-- Ligne 1 : Statut + Date planifiée -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div>
-          <label class="form-label">Statut</label>
-          <select id="prf-status" onchange="togglePlannedAt(this.value)">
-            ${['planned','queued','printing','paused','done','failed','cancelled'].map(s =>
-              `<option value="${s}" ${(p.status||'queued')==s?'selected':''}>${statusBadge(s).replace(/<[^>]+>/g,'').trim()}</option>`).join('')}
-          </select>
-        </div>
-        <div id="prf-planned-at-wrap" style="display:${(p.status==='planned')?'block':'none'}">
-          <label class="form-label">Date planifiée</label>
-          <input id="prf-planned-at" type="date"
-            value="${p.planned_at ? p.planned_at.slice(0,10) : ''}">
-        </div>
-      </div>
-      <!-- Ligne 2 : Progression + Durées -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        <div>
-          <label class="form-label">Progression (%)</label>
-          <input id="prf-progress" type="number" min="0" max="100" value="${p.progress||0}">
-        </div>
-        <div>
-          <label class="form-label">Durée estimée (min)</label>
-          <input id="prf-edur" type="number" value="${p.estimated_duration||''}">
-        </div>
-        <div>
-          <label class="form-label">Durée réelle (min)</label>
-          <input id="prf-adur" type="number" value="${p.actual_duration||''}">
-        </div>
-      </div>
-    </div>
+    <!-- ── Ligne 2 : Filaments + Paramètres ─────────────── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;border-top:0.5px solid var(--border2);padding-top:10px">
 
-    <!-- ── Paramètres impression ──────────────────────────  -->
-    <div style="border-top:0.5px solid var(--border2);padding-top:12px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Paramètres impression</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
-        <div>
-          <label class="form-label">Couche (mm)</label>
-          <input id="prf-layer" type="number" step="0.01" value="${p.layer_height||''}">
+      <!-- Filaments -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase">Filaments</div>
+          <div style="display:flex;gap:4px">
+            <button type="button" class="btn btn-sm" style="font-size:10px"
+              onclick="nfcWaitForFilament(function(f){ addFilamentRow(f.id, f.name, f.color_hex); })">📡</button>
+            <button type="button" class="btn btn-sm" style="font-size:10px" onclick="addFilamentRow()">+</button>
+          </div>
         </div>
-        <div>
-          <label class="form-label">Remplissage (%)</label>
-          <input id="prf-infill" type="number" value="${p.infill_percent||''}">
+        <div id="prf-filaments-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+          <span style="font-size:11px;color:var(--text3)">Total :</span>
+          <input id="prf-grams" type="number" step="0.1" readonly
+                 style="width:70px;background:var(--bg3);color:var(--text3);cursor:not-allowed;font-size:12px"
+                 value="${p.filament_used||''}">
+          <span style="font-size:11px;color:var(--text3)">g</span>
         </div>
-        <div>
-          <label class="form-label">Temp. buse (°C)</label>
-          <input id="prf-tnoz" type="number" value="${p.print_temp||''}">
-        </div>
-        <div>
-          <label class="form-label">Temp. plateau (°C)</label>
-          <input id="prf-tbed" type="number" value="${p.bed_temp||''}">
+      </div>
+
+      <!-- Paramètres impression -->
+      <div>
+        <div style="font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Paramètres</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label class="form-label">Couche (mm)</label>
+            <input id="prf-layer" type="number" step="0.01" value="${p.layer_height||''}">
+          </div>
+          <div>
+            <label class="form-label">Remplissage %</label>
+            <input id="prf-infill" type="number" value="${p.infill_percent||''}">
+          </div>
+          <div>
+            <label class="form-label">Buse (°C)</label>
+            <input id="prf-tnoz" type="number" value="${p.print_temp||''}">
+          </div>
+          <div>
+            <label class="form-label">Plateau (°C)</label>
+            <input id="prf-tbed" type="number" value="${p.bed_temp||''}">
+          </div>
+          <div>
+            <label class="form-label">Vitesse (mm/s)</label>
+            <input id="prf-speed" type="number" value="${p.print_speed||''}">
+          </div>
+          <div>
+            <label class="form-label">Ventilateur %</label>
+            <input id="prf-fan" type="number" value="${p.fan_speed||''}">
+          </div>
         </div>
       </div>
     </div>
 
     <!-- ── Notes ─────────────────────────────────────────── -->
-    <div style="border-top:0.5px solid var(--border2);padding-top:12px">
+    <div style="border-top:0.5px solid var(--border2);padding-top:10px">
       <label class="form-label">Notes</label>
-      <textarea id="prf-notes" style="min-height:60px">${p.notes||''}</textarea>
+      <textarea id="prf-notes" style="min-height:50px">${p.notes||''}</textarea>
     </div>
 
     <div class="modal-footer">
@@ -762,7 +817,6 @@ async function openPrintForm(id = null, prefillProjectId = null, defaultStatus =
 
   // Charger les fichiers si un objet est déjà sélectionné
   if (selectedObject) {
-    loadLibraryFilesForPrint(selectedObject, p.library_file_id);
   }
 
   // Initialiser les lignes filament
@@ -802,18 +856,21 @@ async function savePrint(id) {
     filaments:         filaments,
     project_id:        document.getElementById('prf-project').value || null,
     project_item_name: document.getElementById('prf-item-name').value || null,
-    library_object_id: document.getElementById('prf-library-object')?.value || null,
-    library_file_id:   document.getElementById('prf-library-file')?.value || null,
+    library_object_id: document.getElementById('prf-library-object-hidden')?.value || null,
+    library_file_id:   document.getElementById('prf-library-file-hidden')?.value || null,
     status:            document.getElementById('prf-status').value,
     planned_at:        document.getElementById('prf-planned-at')?.value || null,
     progress:          document.getElementById('prf-progress').value || 0,
     estimated_duration: document.getElementById('prf-edur').value || null,
     actual_duration:    document.getElementById('prf-adur').value || null,
     file_name:          document.getElementById('prf-file').value,
+    print_files:        collectPrintFiles(),
     layer_height:       document.getElementById('prf-layer').value || null,
     infill_percent:     document.getElementById('prf-infill').value || null,
     print_temp:         document.getElementById('prf-tnoz').value || null,
     bed_temp:           document.getElementById('prf-tbed').value || null,
+    print_speed:        document.getElementById('prf-speed')?.value || null,
+    fan_speed:          document.getElementById('prf-fan')?.value || null,
     notes:              document.getElementById('prf-notes').value,
   };
   if (!body.name) return toast('Le nom est requis', 'error');
@@ -1062,6 +1119,155 @@ async function loadLibraryFilesForPrint(objectId, selectedFileId) {
 // ── Multi-filaments ──────────────────────────────────────────────────────────
 var _filamentRowCounter = 0;
 
+// ── Fichiers à imprimer ───────────────────────────────────────────────────
+
+function togglePrintFilesList() {
+  const list = document.getElementById('print-files-list');
+  const icon = document.getElementById('pfl-toggle-icon');
+  if (!list) return;
+  const isHidden = list.style.display === 'none';
+  list.style.display = isHidden ? 'flex' : 'none';
+  if (icon) icon.textContent = isHidden ? '▼' : '▶';
+}
+
+function updatePrintFilesCount() {
+  const list  = document.getElementById('print-files-list');
+  const count = document.getElementById('pfl-count');
+  if (!list || !count) return;
+  const n = list.querySelectorAll('.print-file-row').length;
+  count.textContent = n;
+}
+
+function printFileRowHtml(file, idx) {
+  idx = idx !== undefined ? idx : Date.now();
+  return '<div class="print-file-row" style="display:flex;align-items:center;gap:6px;padding:4px 0">' +
+    '<input type="hidden" class="pf-lib-id" value="' + (file.library_file_id||'') + '">' +
+    '<input class="pf-name" value="' + (file.file_name||file.library_file_name||'') + '" ' +
+      'placeholder="nom-fichier.stl" style="flex:1;font-size:12px">' +
+    '<span style="font-size:12px;color:var(--text3)">×</span>' +
+    '<input type="number" class="pf-qty" value="' + (file.quantity||1) + '" ' +
+      'min="1" max="99" style="width:52px;font-size:12px;text-align:center">' +
+    '<button type="button" class="btn btn-sm btn-danger" style="padding:2px 6px" ' +
+      'onclick="this.closest(\'.print-file-row\').remove();updatePrintFilesCount()">✕</button>' +
+  '</div>';
+}
+
+function addPrintFileRow() {
+  const list = document.getElementById('print-files-list');
+  if (!list) return;
+  // Déplier si replié
+  if (list.style.display === 'none') togglePrintFilesList();
+  const div = document.createElement('div');
+  div.innerHTML = printFileRowHtml({}, Date.now());
+  list.appendChild(div.firstChild);
+  list.lastElementChild.querySelector('.pf-name')?.focus();
+  updatePrintFilesCount();
+}
+
+async function openLibraryObjectPicker() {
+  const objects = await API.get('/library/objects').catch(() => []);
+  if (!objects.length) return toast('Aucun objet dans la bibliothèque', 'error');
+
+  const opts = objects.map(o =>
+    '<option value="' + o.id + '">' + o.name +
+      (o.file_count ? ' (' + o.file_count + ' fichier' + (o.file_count>1?'s':'') + ')' : '') +
+    '</option>'
+  ).join('');
+
+  openModal2(
+    '<div class="form-group">' +
+      '<label class="form-label">Choisir un objet de la bibliothèque</label>' +
+      '<select id="lib-obj-pick" style="width:100%" onchange="loadLibPickerFiles(this.value)">' +
+        '<option value="">— Sélectionner —</option>' + opts +
+      '</select>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin:8px 0">' +
+      '<button class="btn btn-sm" onclick="toggleAllLibFiles(true)">✅ Tout sélectionner</button>' +
+      '<button class="btn btn-sm" onclick="toggleAllLibFiles(false)">⬜ Tout désélectionner</button>' +
+    '</div>' +
+    '<div id="lib-obj-files" style="margin-top:4px;max-height:300px;overflow-y:auto"></div>' +
+    '<div class="modal-footer">' +
+      '<button class="btn" onclick="closeModal2()">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="importLibraryFiles()">Ajouter ces fichiers</button>' +
+    '</div>',
+    'Charger depuis la bibliothèque'
+  );
+}
+
+async function loadLibPickerFiles(id) {
+  const el = document.getElementById('lib-obj-files');
+  if (!el) return;
+  if (!id) { el.innerHTML = ''; return; }
+  const obj = await API.get('/library/objects/' + id).catch(() => null);
+  if (!obj || !obj.files?.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px">Aucun fichier dans cet objet</div>';
+    return;
+  }
+  el.innerHTML =
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:6px">' + obj.files.length + ' fichier' + (obj.files.length>1?'s':'') + ' disponible' + (obj.files.length>1?'s':'') + '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:4px">' +
+    obj.files.map(function(f) {
+      return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg3);border-radius:var(--radius);cursor:pointer">' +
+        '<input type="checkbox" class="lib-file-chk" data-id="' + f.id + '" ' +
+          'data-name="' + (f.name||'').replace(/"/g,'&quot;') + '" data-qty="' + (f.quantity||1) + '" checked ' +
+          'style="width:14px;height:14px;flex-shrink:0">' +
+        '<span style="flex:1;font-size:12px">' + f.name + '</span>' +
+        '<span style="font-size:11px;color:var(--text3)">× ' + (f.quantity||1) + '</span>' +
+      '</label>';
+    }).join('') +
+    '</div>';
+}
+
+function toggleAllLibFiles(checked) {
+  document.querySelectorAll('#lib-obj-files .lib-file-chk').forEach(function(chk) {
+    chk.checked = checked;
+  });
+}
+
+function importLibraryFiles() {
+  const objId  = document.getElementById('lib-obj-pick')?.value;
+  const checks = document.querySelectorAll('#lib-obj-files .lib-file-chk:checked');
+  const list   = document.getElementById('print-files-list');
+  if (!list) return;
+
+  if (!checks.length) return toast('Aucun fichier sélectionné', 'error');
+
+  // Remplir l'objet bibliothèque lié
+  if (objId) {
+    const hidden = document.getElementById('prf-library-object-hidden');
+    if (hidden && !hidden.value) hidden.value = objId;
+  }
+
+  checks.forEach(function(chk) {
+    const div = document.createElement('div');
+    div.innerHTML = printFileRowHtml({
+      library_file_id: chk.dataset.id,
+      file_name:       chk.dataset.name,
+      quantity:        chk.dataset.qty,
+    });
+    list.appendChild(div.firstChild);
+  });
+
+  closeModal2();
+  toast(checks.length + ' fichier' + (checks.length>1?'s':'') + ' ajouté' + (checks.length>1?'s':''), 'success');
+  updatePrintFilesCount();
+}
+
+function collectPrintFiles() {
+  const rows = document.querySelectorAll('#print-files-list .print-file-row');
+  const files = [];
+  rows.forEach(function(row) {
+    const name = row.querySelector('.pf-name')?.value?.trim();
+    if (!name) return;
+    files.push({
+      library_file_id: row.querySelector('.pf-lib-id')?.value || null,
+      file_name:       name,
+      quantity:        parseInt(row.querySelector('.pf-qty')?.value) || 1,
+    });
+  });
+  return files;
+}
+
 function addFilamentRow(filamentId, filamentName, colorHex, qtyEst, qtyAct) {
   const list = document.getElementById('prf-filaments-list');
   if (!list) return;
@@ -1069,9 +1275,10 @@ function addFilamentRow(filamentId, filamentName, colorHex, qtyEst, qtyAct) {
   const rowId = ++_filamentRowCounter;
 
   const options = filaments.map(function(f) {
-    const sel = String(f.id) === String(filamentId) ? ' selected' : '';
+    const sel      = String(f.id) === String(filamentId) ? ' selected' : '';
+    const spoolNum = f.spool_number ? ' [' + f.spool_number + ']' : '';
     return '<option value="' + f.id + '"' + sel + '>' +
-      f.name + ' — ' + Math.round(f.weight_remaining) + 'g</option>';
+      f.name + spoolNum + ' — ' + Math.round(f.weight_remaining) + 'g</option>';
   }).join('');
 
   const row = document.createElement('div');

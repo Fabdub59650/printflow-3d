@@ -581,11 +581,15 @@ router.get('/objects/:id/stats', async (req, res) => {
         COALESCE(SUM(p.filament_used), 0)                    AS total_filament_g,
         MAX(p.created_at)                                    AS last_print
       FROM prints p
-      JOIN library_files lf ON lf.id = p.library_file_id
-      WHERE lf.object_id = ?
-    `, [req.params.id]);
+      WHERE
+        p.library_object_id = ?
+        OR p.library_file_id IN (
+          SELECT id FROM library_files WHERE object_id = ?
+        )
+    `, [req.params.id, req.params.id]);
     res.json(stats || { print_count:0, success_count:0, fail_count:0, total_filament_g:0, last_print:null });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
+
